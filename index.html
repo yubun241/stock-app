@@ -287,10 +287,11 @@ textarea{min-height:92px;resize:vertical;font-family:ui-monospace,Menlo,Consolas
           <div class="f"><label for="gh-token">Fine-grained PAT (このブラウザにのみ保存)</label><input type="password" id="gh-token" autocomplete="off"></div>
         </div>
         <div class="row" style="margin-top:10px">
-          <button class="btn" id="gh-pull" type="button">GitHub から読み込む (置き換え)</button>
+          <button class="btn" id="gh-connect" type="button">接続して読み込む</button>
+          <button class="btn ghost" id="gh-push" type="button">今すぐ GitHub に保存</button>
           <button class="btn ghost" id="gh-forget" type="button">PAT を削除</button>
         </div>
-        <p class="note">起動時に自動で読み込み、ブラウザ内のデータを GitHub の内容で置き換えます。PAT は対象リポジトリ1つ・Contents: Read-only で発行してください。ここで入力した約定は「JSONを保存」→ リポジトリに commit して反映します。</p>
+        <p class="note">記録・編集・削除・設定変更のたびに、数秒後に自動で GitHub へ commit します。起動時は未同期の変更があれば先に送信し、なければ GitHub の内容で置き換えます。PAT は対象リポジトリ1つ・<b>Contents: Read and write</b> で発行してください。</p>
       </div></div>
       <div class="sheet"><h2>JSON出力<span id="exp-note"></span></h2><div class="body">
         <div class="row"><button class="btn" id="exp-dl" type="button">JSONを保存</button><button class="btn ghost" id="exp-copy" type="button">クリップボードへコピー</button><button class="btn ghost" id="exp-show" type="button">内容を表示</button></div>
@@ -364,9 +365,10 @@ function load(){
 }
 let S=load();
 const UI={view:'dash',metric:'pnl',range:'all',wd:'entry',editId:null,side:'E',logLimit:100,seed:42,h:null};
-function save(){
+function save(sync=true){
   try{localStorage.setItem(KEY,JSON.stringify({version:1,settings:S.settings,trades:S.trades,marks:S.marks,meta:S.meta}));storageOK=true}
   catch(e){storageOK=false}
+  if(sync&&typeof ghTouch==='function')ghTouch();
   renderStatus();
 }
 let toastT;
@@ -666,6 +668,7 @@ function deleteTrade(id){
   const prev=S.trades;S.trades=S.trades.filter(x=>x.id!==id);
   const after=compute(S.trades,settingsNum());
   if(after.warns.length>compute(prev,settingsNum()).warns.length&&!confirm('削除すると他の記録に不整合が出ます(売却が保有を超える等)。それでも削除しますか？')){S.trades=prev;return}
+  if(typeof ghDeleted==='function')ghDeleted(id);
   save();refreshAll();toast('削除しました');
 }
 function tradeRow(t,withAct){
@@ -763,7 +766,7 @@ function download(name,text,type){
   const b=new Blob([text],{type}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=name;document.body.appendChild(a);a.click();
   setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},600);
 }
-function exportJSON(){const s=JSON.stringify(buildExport(),null,2);S.meta.lastExport=new Date().toISOString();save();return s}
+function exportJSON(){const s=JSON.stringify(buildExport(),null,2);S.meta.lastExport=new Date().toISOString();save(false);return s}
 function normTrade(r,i){
   const side=String(r.side||r.F||'').toUpperCase().trim()[0],date=normDate(r.date||r.datetime),price=+r.price,qty=+r.qty;
   if(side!=='E'&&side!=='O')return{error:`${i+1}件目: side は E か O`};
@@ -834,6 +837,7 @@ function applyImport(text,mode,fname){
     if(!incoming.length)throw new Error('取り込める取引がありませんでした');
     if(mode==='replace'){
       if(!confirm(`現在の${S.trades.length}件を削除し、${incoming.length}件に置き換えます。よろしいですか？`))return;
+      if(typeof ghDeleted==='function')S.trades.forEach(x=>ghDeleted(x.id));
       S.trades=[];S.meta.seq=0;if(settingsIn)S.settings={...S.settings,...settingsIn};S.marks=marksIn&&typeof marksIn==='object'?marksIn:{};
     }else if(marksIn&&typeof marksIn==='object')S.marks={...marksIn,...S.marks};
     const have=new Set(S.trades.map(x=>x.id));let added=0,dup=0;
@@ -858,7 +862,8 @@ function renderStatus(){
   const n=S.trades.length;let ex='未出力',warn=n>0;
   if(S.meta.lastExport){const d=Math.floor((Date.now()-new Date(S.meta.lastExport))/864e5);ex=d<=0?'本日出力':d+'日前に出力';warn=n>0&&d>14}
   $('#stat').className='stat'+(warn?' warn':'');
-  $('#stat').innerHTML=(storageOK?`保存済み・${n}件`:'<b style="color:var(--loss)">ブラウザ保存が無効です</b>')+`<br>JSON: <b>${ex}</b>`;
+  const g=typeof ghStatus==='function'?ghStatus():'';
+  $('#stat').innerHTML=(storageOK?`保存済み・${n}件`:'<b style="color:var(--loss)">ブラウザ保存が無効です</b>')+(g?`<br>GitHub: ${g}`:`<br>JSON: <b>${ex}</b>`);
   $('#exp-note').textContent=`最終出力: ${S.meta.lastExport?S.meta.lastExport.slice(0,10):'まだありません'}`;
 }
 function renderData(){
@@ -914,7 +919,7 @@ $('#s-jp').addEventListener('change',()=>{S.settings.jp=$('#s-jp').checked;save(
 $('#wipe').addEventListener('click',()=>{
   if(!confirm('すべての取引・設定を削除します。JSONは書き出し済みですか？'))return;
   if(!confirm('本当に削除してよろしいですか？ 元には戻せません。'))return;
-  S=DEFAULTS();save();refreshAll();$('#imp-report').innerHTML='';toast('削除しました');
+  S=DEFAULTS();save(false);refreshAll();$('#imp-report').innerHTML='';toast('このブラウザのデータを削除しました (GitHub 側は変更していません)');
 });
 let rt;window.addEventListener('resize',()=>{clearTimeout(rt);rt=setTimeout(()=>{if(['dash','ana'].includes(UI.view))RENDER[UI.view]()},150)});
 
@@ -922,6 +927,7 @@ let rt;window.addEventListener('resize',()=>{clearTimeout(rt);rt=setTimeout(()=>
 const GHKEY='tradeJournal.gh';
 const ghCfg=()=>{try{return JSON.parse(localStorage.getItem(GHKEY))||{}}catch(e){return{}}};
 const ghSave=c=>{try{localStorage.setItem(GHKEY,JSON.stringify(c))}catch(e){}};
+const ghReady=c=>!!(c.repo&&c.token);
 function ghNormRepo(v){
   v=String(v||'').trim();
   const m=v.match(/github\.com[\/:]([^\/\s]+)\/([^\/\s#?]+)/i)||v.match(/^([^\/\s]+)\/([^\/\s#?]+)$/);
@@ -929,45 +935,135 @@ function ghNormRepo(v){
 }
 const ghForm=()=>({repo:ghNormRepo($('#gh-repo').value),path:$('#gh-path').value.trim().replace(/^\/+/,'')||'trade-journal.json',token:$('#gh-token').value.trim()});
 function ghNote(t){$('#gh-note').textContent=t||''}
-function applyReplace(text){
-  const d=JSON.parse(text),arr=Array.isArray(d)?d:d.trades;
-  if(!Array.isArray(arr))throw new Error('trades 配列が見つかりません');
-  const incoming=[],bad=[];
-  arr.forEach((r,i)=>{const n=normTrade(r,i);if(n.error)bad.push(n.error);else incoming.push(n)});
-  if(!incoming.length)throw new Error('取り込める取引がありませんでした');
+const b64enc=str=>{const u=new TextEncoder().encode(str);let s='';for(let i=0;i<u.length;i+=0x8000)s+=String.fromCharCode.apply(null,u.subarray(i,i+0x8000));return btoa(s)};
+const b64dec=b=>new TextDecoder().decode(Uint8Array.from(atob(String(b).replace(/\s/g,'')),c=>c.charCodeAt(0)));
+const hhmm=iso=>{if(!iso)return '';const d=new Date(iso);return pad(d.getHours())+':'+pad(d.getMinutes())};
+const ymdhm=iso=>{if(!iso)return '';const d=new Date(iso);return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${hhmm(iso)}`};
+let GH={busy:false,timer:null,err:null,lastLocal:null};
+
+async function ghApi(method,body){
+  const c=ghCfg();
+  const url=`https://api.github.com/repos/${c.repo}/contents/${encodeURI(c.path||'trade-journal.json')}`;
+  const r=await fetch(url,{method,headers:{Authorization:`Bearer ${c.token}`,Accept:'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28',...(body?{'Content-Type':'application/json'}:{})},
+    cache:'no-store',body:body?JSON.stringify(body):undefined});
+  return r;
+}
+function ghErr(r){
+  const m={401:'PAT が無効か期限切れです',403:'権限不足です (PAT に Contents: Read and write が必要)',404:'リポジトリかパスが見つかりません (private は PAT の対象外でも 404)',422:'リクエスト不正 (sha 不一致の可能性)'};
+  return new Error(m[r.status]||`HTTP ${r.status}`);
+}
+/* リモート取得: {sha,data|null} */
+async function ghFetch(){
+  const r=await ghApi('GET');
+  if(r.status===404){
+    const c=ghCfg(),rr=await fetch(`https://api.github.com/repos/${c.repo}`,{headers:{Authorization:`Bearer ${c.token}`,Accept:'application/vnd.github+json'},cache:'no-store'});
+    if(!rr.ok)throw ghErr(rr);
+    return {sha:null,data:null,missing:true};
+  }
+  if(!r.ok)throw ghErr(r);
+  const j=await r.json();
+  return {sha:j.sha,data:JSON.parse(b64dec(j.content))};
+}
+/* ローカル状態の変更 */
+function ghTouch(){const c=ghCfg();if(!ghReady(c))return;c.dirty=true;ghSave(c);ghSchedule()}
+function ghDeleted(id){const c=ghCfg();if(!ghReady(c))return;c.deleted=[...new Set([...(c.deleted||[]),String(id)])];ghSave(c)}
+function ghSchedule(){clearTimeout(GH.timer);GH.timer=setTimeout(()=>ghPush(true),1500)}
+function ghStatus(){
+  const c=ghCfg();if(!ghReady(c))return '';
+  if(GH.busy)return '<b>同期中…</b>';
+  if(GH.err)return `<b style="color:var(--loss)">失敗</b> ${esc(GH.err)}`;
+  if(c.dirty)return '<b style="color:var(--warn)">未同期</b>';
+  return c.lastSync?`<b>同期済み ${hhmm(c.lastSync)}</b>`:'接続済み';
+}
+/* リモートの内容でローカルを置き換え */
+function ghApplyRemote(d){
+  const arr=Array.isArray(d)?d:(d&&d.trades)||[];
+  const incoming=[];arr.forEach((r,i)=>{const n=normTrade(r,i);if(!n.error)incoming.push(n)});
   S.trades=[];S.meta.seq=0;
-  if(!Array.isArray(d)){
+  if(d&&!Array.isArray(d)){
     if(d.settings&&typeof d.settings==='object')S.settings={...S.settings,...d.settings};
     S.marks=d.marks&&typeof d.marks==='object'?d.marks:{};
   }
   incoming.forEach(n=>{n.seq=++S.meta.seq;S.trades.push(n)});
-  save();refreshAll();
-  return {n:incoming.length,bad};
+  save(false);refreshAll();
+  return incoming.length;
 }
-async function ghPull(auto){
-  const c=ghCfg();
-  if(!c.repo||!c.token){if(!auto)toast('リポジトリと PAT を入力してください');return}
-  ghNote('読み込み中…');
+/* リモートとローカルを id でマージ (ローカル優先、ローカルで削除した id は除外) */
+function ghMerge(remote,deleted){
+  const arr=Array.isArray(remote)?remote:(remote&&remote.trades)||[];
+  const m=new Map();
+  arr.forEach((r,i)=>{const n=normTrade(r,i);if(!n.error)m.set(n.id,n)});
+  S.trades.forEach(t=>m.set(t.id,t));
+  (deleted||[]).forEach(id=>m.delete(id));
+  const merged=[...m.values()];
+  merged.forEach(t=>{if(!t.seq)t.seq=++S.meta.seq});
+  S.trades=merged;
+  if(remote&&!Array.isArray(remote)&&remote.marks&&typeof remote.marks==='object')S.marks={...remote.marks,...S.marks};
+  save(false);refreshAll();
+}
+/* 送信 (409 なら取得→マージ→再送) */
+async function ghPush(auto){
+  const c=ghCfg();if(!ghReady(c)){if(!auto)toast('先に接続してください');return}
+  if(GH.busy){ghSchedule();return}
+  GH.busy=true;GH.err=null;renderStatus();
   try{
-    const url=`https://api.github.com/repos/${c.repo}/contents/${encodeURI(c.path||'trade-journal.json')}`;
-    const r=await fetch(url,{headers:{Authorization:`Bearer ${c.token}`,Accept:'application/vnd.github.raw+json','X-GitHub-Api-Version':'2022-11-28'},cache:'no-store'});
-    if(!r.ok){
-      const m={401:'PAT が無効か期限切れです',403:'権限不足です (PAT の対象リポジトリと Contents 権限を確認)',404:'リポジトリかパスが見つかりません (private の場合は PAT の対象外でも 404 になります)'};
-      throw new Error(m[r.status]||`HTTP ${r.status}`);
+    for(let attempt=0;attempt<3;attempt++){
+      const cur=ghCfg();
+      const body={message:`journal: ${S.trades.length}件 ${new Date().toISOString().slice(0,19).replace('T',' ')}Z`,content:b64enc(JSON.stringify(buildExport(),null,1))};
+      if(cur.sha)body.sha=cur.sha;
+      const r=await ghApi('PUT',body);
+      if(r.ok){
+        const j=await r.json();
+        const n=ghCfg();n.sha=j.content.sha;n.dirty=false;n.deleted=[];n.lastSync=new Date().toISOString();ghSave(n);
+        ghNote(`最終同期 ${ymdhm(n.lastSync)}`);
+        if(!auto)toast('GitHub に保存しました');
+        return true;
+      }
+      if(r.status===409||r.status===422){
+        const rem=await ghFetch();
+        ghMerge(rem.data,cur.deleted);
+        const n=ghCfg();n.sha=rem.sha;ghSave(n);
+        continue;
+      }
+      throw ghErr(r);
     }
-    const res=applyReplace(await r.text());
-    c.lastPull=new Date().toISOString();ghSave(c);
-    ghNote(`最終取得 ${c.lastPull.slice(0,16).replace('T',' ')}・${res.n}件`);
-    if(res.bad.length)$('#imp-report').innerHTML=reportHTML('GitHub 読み込み',[{h:`読み込めなかった行 (${res.bad.length}件)`,a:res.bad.slice(0,20)}]);
-    toast(`GitHub から ${res.n}件を読み込みました`);
+    throw new Error('競合が解消できませんでした');
   }catch(e){
-    ghNote(c.lastPull?`最終取得 ${c.lastPull.slice(0,16).replace('T',' ')} (今回失敗)`:'');
-    toast('GitHub 読み込み失敗: '+(e.message||e));
-  }
+    GH.err=e.message||String(e);
+    toast('GitHub 保存失敗: '+GH.err);
+    return false;
+  }finally{GH.busy=false;renderStatus()}
 }
-$('#gh-pull').addEventListener('click',()=>{const f=ghForm();if(!f.repo)return toast('リポジトリは https://github.com/owner/repo か owner/repo の形で入力してください');$('#gh-repo').value=f.repo;ghSave({...ghCfg(),...f});ghPull(false)});
-$('#gh-forget').addEventListener('click',()=>{const c=ghCfg();delete c.token;ghSave(c);$('#gh-token').value='';toast('PAT を削除しました')});
-{const c=ghCfg();$('#gh-repo').value=c.repo||'';$('#gh-path').value=c.path||'trade-journal.json';$('#gh-token').value=c.token||'';if(c.lastPull)ghNote(`最終取得 ${c.lastPull.slice(0,16).replace('T',' ')}`)}
+/* 取得して置き換え (未同期の変更があれば先に送信) */
+async function ghPull(auto){
+  const c=ghCfg();if(!ghReady(c)){if(!auto)toast('リポジトリと PAT を入力してください');return}
+  if(c.dirty){const ok=await ghPush(true);if(!ok&&!auto)toast('未同期の変更があるため読み込みを中止しました');return}
+  GH.busy=true;GH.err=null;renderStatus();ghNote('読み込み中…');
+  try{
+    const rem=await ghFetch();
+    const n=ghCfg();n.sha=rem.sha;n.lastSync=new Date().toISOString();n.dirty=false;n.deleted=[];ghSave(n);
+    if(rem.missing){ghNote('リポジトリにファイルがありません。次回の保存時に作成します');if(S.trades.length){const m=ghCfg();m.dirty=true;ghSave(m);ghSchedule()}return}
+    const cnt=ghApplyRemote(rem.data);
+    ghNote(`最終同期 ${ymdhm(n.lastSync)}・${cnt}件`);
+    if(!auto)toast(`GitHub から ${cnt}件を読み込みました`);
+  }catch(e){
+    GH.err=e.message||String(e);ghNote('');
+    toast('GitHub 読み込み失敗: '+GH.err);
+  }finally{GH.busy=false;renderStatus()}
+}
+$('#gh-connect').addEventListener('click',()=>{
+  const f=ghForm();if(!f.repo)return toast('リポジトリは https://github.com/owner/repo か owner/repo の形で入力してください');
+  if(!f.token)return toast('PAT を入力してください');
+  $('#gh-repo').value=f.repo;
+  const prev=ghCfg(),changed=prev.repo!==f.repo||prev.path!==f.path;
+  const c={...prev,...f};if(changed){c.sha=null;c.dirty=false;c.deleted=[]}
+  if(S.trades.length&&!prev.repo&&!confirm(`このブラウザの${S.trades.length}件を GitHub の内容で置き換えます。よろしいですか？ (ブラウザ側を残したい場合は先に JSON を保存してください)`))return;
+  ghSave(c);ghPull(false);
+});
+$('#gh-push').addEventListener('click',()=>{const c=ghCfg();c.dirty=true;ghSave(c);ghPush(false)});
+$('#gh-forget').addEventListener('click',()=>{const c=ghCfg();delete c.token;ghSave(c);$('#gh-token').value='';renderStatus();toast('PAT を削除しました')});
+window.addEventListener('beforeunload',e=>{if(ghCfg().dirty){e.preventDefault();e.returnValue=''}});
+{const c=ghCfg();$('#gh-repo').value=c.repo||'';$('#gh-path').value=c.path||'trade-journal.json';$('#gh-token').value=c.token||'';if(c.lastSync)ghNote(`最終同期 ${ymdhm(c.lastSync)}`)}
 
 /* ===== 起動 ===== */
 $('#mc-h').value=S.settings.mcN||20;
