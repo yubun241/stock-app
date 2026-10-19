@@ -328,10 +328,6 @@ dialog#jsondlg::backdrop{background:rgba(0,0,0,.45)}
         <label class="row" style="gap:6px;margin-top:12px"><input type="checkbox" id="s-jp"> 色を日本式にする (利益=赤 / 損失=青)</label>
         <p class="note">従来の「実質額 = 利益 × 0.8」は、利益時80%・損失時100%に相当します。損失側にも0.8を掛けると損失が小さく見えるため、既定では分けています。</p>
       </div></div>
-      <div class="sheet"><h2>初期化</h2><div class="body">
-        <button class="btn danger" id="wipe" type="button">すべてのデータを削除</button>
-        <p class="note">削除前に必ずJSONを書き出してください。元には戻せません。</p>
-      </div></div>
     </section>
   </main>
 </div>
@@ -959,11 +955,6 @@ setNum('#s-loss',v=>S.settings.netLoss=isFinite(v)?v/100:1);
 setNum('#s-fee',v=>S.settings.fee=isFinite(v)?v:0);
 setNum('#s-min',v=>S.settings.minN=isFinite(v)&&v>0?Math.round(v):30);
 $('#s-jp').addEventListener('change',()=>{S.settings.jp=$('#s-jp').checked;save();refreshAll()});
-$('#wipe').addEventListener('click',()=>{
-  if(!confirm('すべての取引・設定を削除します。JSONは書き出し済みですか？'))return;
-  if(!confirm('本当に削除してよろしいですか？ 元には戻せません。'))return;
-  S=DEFAULTS();save(false);refreshAll();$('#imp-report').innerHTML='';toast('このブラウザのデータを削除しました (GitHub 側は変更していません)');
-});
 let rt;window.addEventListener('resize',()=>{clearTimeout(rt);rt=setTimeout(()=>{if(['dash','ana'].includes(UI.view))RENDER[UI.view]()},150)});
 
 /* ===== GitHub 同期 ===== */
