@@ -80,6 +80,7 @@ svg .gl.z{stroke:var(--mute);opacity:.9}
 svg .ln{fill:none;stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
 svg .c-acc{stroke:var(--accent)} svg .c-ink{stroke:var(--ink)} svg .c-dim{stroke:var(--mute);stroke-width:1.4}
 svg .dash{stroke-dasharray:5 4}
+svg .dot{stroke-dasharray:1.5 3}
 svg .band{fill:var(--accent);opacity:.14} svg .band2{fill:var(--accent);opacity:.1}
 svg .area{fill:var(--accent);opacity:.09}
 svg .f-gain{fill:var(--gain)} svg .f-loss{fill:var(--loss)} svg .f-mute{fill:var(--mute);opacity:.5}
@@ -199,6 +200,7 @@ textarea{min-height:92px;resize:vertical;font-family:ui-monospace,Menlo,Consolas
       <div id="dash-warn"></div>
       <div class="sheet"><h2>成績サマリー<span id="sum-note"></span></h2><div class="body" id="summary"></div></div>
       <div class="sheet"><h2>累計損益の推移<span>決済日ごとの積み上げ</span></h2><div class="body"><div class="chart" id="ch-curve"></div></div></div>
+      <div class="sheet"><h2>取引ごとの収益率<span>横軸=決済日・縦軸=損益÷投資額・点の大きさ=投資額。黒線=単純平均、青線=加重平均(損益合計÷投資額合計)</span></h2><div class="body"><div class="chart" id="ch-ratio"></div><p class="note" id="ratio-note"></p></div></div>
       <div class="cols">
         <div class="sheet"><h2>月次損益<span>灰色は次月の予測(中央値と10–90%範囲)</span></h2><div class="body"><div class="chart" id="ch-month"></div></div></div>
         <div class="sheet"><h2>曜日別の平均損益<span><span class="seg" id="wdmode" style="margin-left:6px"><button data-w="entry">エントリー曜日</button><button data-w="exit">決済曜日</button></span></span></h2><div class="body"><div class="chart" id="ch-wd"></div></div></div>
@@ -517,6 +519,19 @@ function barChart(el,o){
   el.innerHTML=svgWrap(b,body,o.label||'棒グラフ');
 }
 
+function ratioScatter(el,pts,avg,wavg){
+  if(!pts.length)return empty(el);
+  const xs=pts.map(p=>p.x),ys=pts.map(p=>p.y).concat([avg,wavg].filter(v=>isFinite(v)));
+  const x0=Math.min(...xs),x1=Math.max(...xs),padX=Math.max(3,Math.round((x1-x0)*.02));
+  const b=plotBase(el,{x:[x0-padX,x1+padX],y:[Math.min(...ys),Math.max(...ys)],h:250,xt:timeTicks(x0,x1),yfmt:v=>(+v.toFixed(1))+'%'});
+  let body=b.g;
+  const line=(v,stroke,w,lab,dy)=>{if(!isFinite(v))return;body+=`<line x1="${b.m.l}" x2="${b.W-b.m.r}" y1="${b.Y(v)}" y2="${b.Y(v)}" stroke="${stroke}" stroke-width="${w}"/><text class="lbl" style="fill:${stroke}" x="${b.W-b.m.r-2}" y="${b.Y(v)+dy}" text-anchor="end">${esc(lab)}</text>`};
+  line(avg,'var(--ink)',1.6,`平均 ${pct(avg,2,true)}`,-5);
+  line(wavg,'var(--accent)',1.2,`加重平均 ${pct(wavg,2,true)}`,13);
+  const mc=Math.max(1,...pts.map(p=>p.c));
+  pts.forEach(p=>{const r=3+7*Math.sqrt(p.c/mc);body+=`<circle cx="${b.X(p.x)}" cy="${b.Y(p.y)}" r="${r.toFixed(1)}" class="${p.y>=0?'dot-g':'dot-l'}"><title>${esc(p.t)}</title></circle>`});
+  el.innerHTML=svgWrap(b,body,'取引ごとの収益率の推移');
+}
 function scatter(el,pts){
   if(!pts.length)return empty(el);
   const xs=pts.map(p=>p.x),ys=pts.map(p=>p.y);
@@ -557,6 +572,11 @@ function renderDash(){
   if(pts.length)pts.unshift([pts[0][0]-1,0,null]);
   lineChart($('#ch-curve'),{series:[{pts,step:true,area:true,cls:'c-acc',dots:true,tip:p=>p[2]?`${p[2].date} ${p[2].name} ${yen(val(p[2]),true)} → 累計 ${yen(p[1],true)}`:''}],
     xt:timeTicks,endLabel:p=>yen(p[1],true),h:250,label:'累計損益の推移'});
+  // 収益率の散布図
+  const rp=cl.map(c=>({x:dayNum(c.date),y:c.cost>0?val(c)/c.cost*100:0,c:c.cost,t:`${c.date} ${c.name} 投資 ${yen(c.cost)} → ${yen(val(c),true)} (${pct(c.cost>0?val(c)/c.cost*100:0,2,true)})`}));
+  const rAvg=mean(rp.map(p=>p.y)),rTotC=sum(cl.map(c=>c.cost)),rW=rTotC>0?sum(cl.map(val))/rTotC*100:NaN;
+  ratioScatter($('#ch-ratio'),rp,rAvg,rW);
+  $('#ratio-note').textContent=cl.length?`${cl.length}件・単純平均 ${pct(rAvg,2,true)}・加重平均 ${pct(rW,2,true)}・中央値 ${pct(rp.map(p=>p.y).sort((a,b)=>a-b)[Math.floor(rp.length/2)],2,true)}。単純平均は1件を1票、加重平均は投資額を票として扱います。乖離が大きいときは大口と小口で成績が違うサインです。`:'';
   // 月次
   const mo={};cl.forEach(c=>{const k=c.date.slice(0,7);mo[k]=(mo[k]||0)+val(c)});
   const keys=Object.keys(mo).sort();const items=[];
