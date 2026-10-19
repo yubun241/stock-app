@@ -282,7 +282,7 @@ textarea{min-height:92px;resize:vertical;font-family:ui-monospace,Menlo,Consolas
       <div class="head"><div><h1>データ</h1><p>入力内容はこのブラウザに自動保存されます。JSONで書き出して保管・移行できます。</p></div></div>
       <div class="sheet"><h2>GitHub 同期<span id="gh-note"></span></h2><div class="body">
         <div class="sp">
-          <div class="f"><label for="gh-repo">リポジトリ (owner/repo)</label><input type="text" id="gh-repo" placeholder="you/stockdata-data" autocomplete="off" spellcheck="false"></div>
+          <div class="f"><label for="gh-repo">リポジトリ (URL か owner/repo を貼り付け)</label><input type="text" id="gh-repo" placeholder="https://github.com/you/stockdata-data" autocomplete="off" spellcheck="false"></div>
           <div class="f"><label for="gh-path">ファイルパス</label><input type="text" id="gh-path" placeholder="trade-journal.json" autocomplete="off" spellcheck="false"></div>
           <div class="f"><label for="gh-token">Fine-grained PAT (このブラウザにのみ保存)</label><input type="password" id="gh-token" autocomplete="off"></div>
         </div>
@@ -922,7 +922,12 @@ let rt;window.addEventListener('resize',()=>{clearTimeout(rt);rt=setTimeout(()=>
 const GHKEY='tradeJournal.gh';
 const ghCfg=()=>{try{return JSON.parse(localStorage.getItem(GHKEY))||{}}catch(e){return{}}};
 const ghSave=c=>{try{localStorage.setItem(GHKEY,JSON.stringify(c))}catch(e){}};
-const ghForm=()=>({repo:$('#gh-repo').value.trim(),path:$('#gh-path').value.trim()||'trade-journal.json',token:$('#gh-token').value.trim()});
+function ghNormRepo(v){
+  v=String(v||'').trim();
+  const m=v.match(/github\.com[\/:]([^\/\s]+)\/([^\/\s#?]+)/i)||v.match(/^([^\/\s]+)\/([^\/\s#?]+)$/);
+  return m?`${m[1]}/${m[2].replace(/\.git$/,'')}`:'';
+}
+const ghForm=()=>({repo:ghNormRepo($('#gh-repo').value),path:$('#gh-path').value.trim().replace(/^\/+/,'')||'trade-journal.json',token:$('#gh-token').value.trim()});
 function ghNote(t){$('#gh-note').textContent=t||''}
 function applyReplace(text){
   const d=JSON.parse(text),arr=Array.isArray(d)?d:d.trades;
@@ -960,7 +965,7 @@ async function ghPull(auto){
     toast('GitHub 読み込み失敗: '+(e.message||e));
   }
 }
-$('#gh-pull').addEventListener('click',()=>{ghSave({...ghCfg(),...ghForm()});ghPull(false)});
+$('#gh-pull').addEventListener('click',()=>{const f=ghForm();if(!f.repo)return toast('リポジトリは https://github.com/owner/repo か owner/repo の形で入力してください');$('#gh-repo').value=f.repo;ghSave({...ghCfg(),...f});ghPull(false)});
 $('#gh-forget').addEventListener('click',()=>{const c=ghCfg();delete c.token;ghSave(c);$('#gh-token').value='';toast('PAT を削除しました')});
 {const c=ghCfg();$('#gh-repo').value=c.repo||'';$('#gh-path').value=c.path||'trade-journal.json';$('#gh-token').value=c.token||'';if(c.lastPull)ghNote(`最終取得 ${c.lastPull.slice(0,16).replace('T',' ')}`)}
 
