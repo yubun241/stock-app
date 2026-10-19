@@ -1,0 +1,975 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; connect-src https://api.github.com; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:">
+<title>取引ジャーナル</title>
+<style>
+:root{
+  color-scheme: light dark;
+  --bg:#e8ecf0; --paper:#f6f8fa; --ink:#14202e; --mute:#5b6a7a; --rule:#c3ccd6; --grid:#d8dfe6;
+  --accent:#1b4f8f; --gain:#0b7a5e; --loss:#c4432b; --warn:#a96b00; --field:#ffffff; --hover:#eaeff4;
+}
+@media (prefers-color-scheme:dark){
+  :root{ --bg:#0d131a; --paper:#141c25; --ink:#e2e8ee; --mute:#8d9eb0; --rule:#2a3643; --grid:#1d2833;
+    --accent:#6aa5e8; --gain:#3fc4a0; --loss:#f0795e; --warn:#e0a53c; --field:#0f161e; --hover:#1a242f; }
+}
+:root.jp{ --gain:#c9372c; --loss:#2a6fb5; }
+@media (prefers-color-scheme:dark){ :root.jp{ --gain:#f2766b; --loss:#6aa5e8; } }
+
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font:14px/1.65 "Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Meiryo","Noto Sans JP",system-ui,sans-serif}
+button,input,select,textarea{font:inherit;color:inherit}
+.num,td.n,.m dd{font-variant-numeric:tabular-nums}
+.gain{color:var(--gain)} .loss{color:var(--loss)} .mute{color:var(--mute)}
+[hidden]{display:none!important}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+.app{display:grid;grid-template-columns:196px minmax(0,1fr);min-height:100vh}
+.rail{position:sticky;top:0;height:100vh;padding:22px 14px 18px;background:var(--paper);border-right:1px solid var(--rule);
+  display:flex;flex-direction:column;gap:4px}
+.brand{font-weight:700;font-size:17px;letter-spacing:.04em;margin:0 6px 2px}
+.brand small{display:block;font-weight:400;font-size:11px;color:var(--mute);letter-spacing:0}
+.rail nav{display:flex;flex-direction:column;gap:2px;margin-top:16px}
+.rail nav button{all:unset;cursor:pointer;padding:9px 10px;border-left:3px solid transparent;color:var(--mute)}
+.rail nav button:hover{background:var(--hover);color:var(--ink)}
+.rail nav button[aria-current="page"]{border-left-color:var(--accent);color:var(--ink);font-weight:700;background:var(--hover)}
+.rail nav button:focus-visible{outline:2px solid var(--accent)}
+.stat{margin-top:auto;font-size:11px;color:var(--mute);padding:0 6px;line-height:1.5}
+.stat b{color:var(--ink);font-weight:600}
+.stat.warn b{color:var(--warn)}
+
+main{padding:22px 26px 60px;min-width:0;max-width:1180px}
+.head{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:10px 20px;margin-bottom:14px}
+.head h1{margin:0;font-size:20px;letter-spacing:.02em}
+.head p{margin:2px 0 0;color:var(--mute);font-size:12px}
+.seg{display:inline-flex;border:1px solid var(--rule);background:var(--paper)}
+.seg button{all:unset;cursor:pointer;padding:5px 12px;font-size:12px;color:var(--mute)}
+.seg button+button{border-left:1px solid var(--rule)}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
+.seg button:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.tools{display:flex;flex-wrap:wrap;gap:8px}
+
+.sheet{background:var(--paper);border:1px solid var(--rule);margin-bottom:16px}
+.sheet>h2{margin:0;padding:8px 14px;font-size:13px;font-weight:700;border-bottom:1px solid var(--rule);display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.sheet>h2 span{font-weight:400;color:var(--mute);font-size:11px}
+.sheet .body{padding:12px 14px}
+.cols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.cols>.sheet{margin-bottom:0}
+@media (max-width:980px){.cols{grid-template-columns:1fr}}
+
+.m{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:0 28px;margin:0}
+.m>div{display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:7px 0;border-bottom:1px dotted var(--rule)}
+.m dt{color:var(--mute);font-size:12px}
+.m dd{margin:0;font-weight:600;white-space:nowrap}
+.hero{display:flex;flex-wrap:wrap;gap:6px 30px;align-items:baseline;padding:2px 0 12px}
+.hero .big{font-size:30px;font-weight:700;line-height:1.1;font-variant-numeric:tabular-nums}
+.hero .sub{color:var(--mute);font-size:12px}
+
+.chart{position:relative;min-height:60px;background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);
+  background-size:14px 14px;background-position:0 0;background-blend-mode:normal}
+.chart svg{display:block;background:color-mix(in srgb,var(--paper) 86%,transparent)}
+svg text{fill:var(--mute);font-size:11px;font-family:inherit}
+svg .al{font-size:10.5px}
+svg .gl{stroke:var(--rule);stroke-width:1;opacity:.55}
+svg .gl.v{stroke-dasharray:2 4}
+svg .gl.z{stroke:var(--mute);opacity:.9}
+svg .ln{fill:none;stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
+svg .c-acc{stroke:var(--accent)} svg .c-ink{stroke:var(--ink)} svg .c-dim{stroke:var(--mute);stroke-width:1.4}
+svg .dash{stroke-dasharray:5 4}
+svg .band{fill:var(--accent);opacity:.14} svg .band2{fill:var(--accent);opacity:.1}
+svg .area{fill:var(--accent);opacity:.09}
+svg .f-gain{fill:var(--gain)} svg .f-loss{fill:var(--loss)} svg .f-mute{fill:var(--mute);opacity:.5}
+svg .f-ghost{fill:var(--accent);fill-opacity:.16;stroke:var(--accent);stroke-dasharray:3 3}
+svg .wh{stroke:var(--accent);stroke-width:1.5}
+svg .dot-g{fill:var(--gain);fill-opacity:.75} svg .dot-l{fill:var(--loss);fill-opacity:.75}
+svg .lbl{fill:var(--ink);font-size:11px;font-weight:600}
+.empty{margin:0;padding:26px 10px;text-align:center;color:var(--mute)}
+
+.sym{max-height:340px;overflow:auto}
+.sym .r{display:grid;grid-template-columns:minmax(96px,150px) 1fr 96px;gap:8px;align-items:center;padding:4px 0;border-bottom:1px dotted var(--rule);font-size:12.5px}
+.sym .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sym .bar{position:relative;height:14px}
+.sym .bar::before{content:"";position:absolute;left:50%;top:-4px;bottom:-4px;width:1px;background:var(--mute);opacity:.6}
+.sym .bar i{position:absolute;top:2px;bottom:2px}
+.sym .v{text-align:right;font-variant-numeric:tabular-nums}
+.sym .v small{display:block;color:var(--mute);font-size:10.5px;line-height:1.2}
+
+table{border-collapse:collapse;width:100%}
+th,td{padding:6px 9px;text-align:left;white-space:nowrap;border-bottom:1px solid var(--rule);font-size:12.5px}
+th{font-weight:600;color:var(--mute);font-size:11.5px;background:color-mix(in srgb,var(--paper) 70%,var(--bg))}
+td.n,th.n{text-align:right}
+tbody tr:hover{background:var(--hover)}
+.scroll{overflow:auto;max-width:100%}
+.tag{display:inline-block;min-width:22px;text-align:center;padding:0 5px;font-size:11px;font-weight:700;border:1px solid currentColor}
+.tag.E{color:var(--accent)} .tag.O{color:var(--warn)}
+tr.bad td{background:color-mix(in srgb,var(--loss) 10%,transparent)}
+.act button{all:unset;cursor:pointer;color:var(--accent);font-size:12px;padding:2px 6px}
+.act button:hover{text-decoration:underline}
+.act button.del{color:var(--loss)}
+
+.btn{cursor:pointer;border:1px solid var(--ink);background:var(--ink);color:var(--paper);padding:7px 15px;font-weight:600}
+.btn:hover{opacity:.88}
+.btn.ghost{background:transparent;color:var(--ink);border-color:var(--rule)}
+.btn.ghost:hover{border-color:var(--ink);opacity:1}
+.btn.danger{background:transparent;color:var(--loss);border-color:var(--loss)}
+.btn.sm{padding:4px 10px;font-size:12px}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+
+.form{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px 14px}
+.form .f{display:flex;flex-direction:column;gap:3px;grid-column:span 2}
+.form .f.w3{grid-column:span 3} .form .f.w6{grid-column:span 6}
+@media (max-width:640px){.form .f,.form .f.w3{grid-column:span 6}.form .f.h{grid-column:span 3}}
+label,.lab{font-size:11.5px;color:var(--mute)}
+input[type=text],input[type=number],input[type=date],select,textarea{width:100%;padding:8px 9px;border:1px solid var(--rule);background:var(--field);border-radius:0}
+input:focus,select:focus,textarea:focus{border-color:var(--accent)}
+textarea{min-height:92px;resize:vertical;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px}
+.side{display:grid;grid-template-columns:1fr 1fr;gap:0}
+.side button{all:unset;cursor:pointer;text-align:center;padding:11px 8px;border:1px solid var(--rule);font-weight:700;background:var(--field);color:var(--mute)}
+.side button+button{border-left:0}
+.side button[aria-pressed="true"].E{background:var(--accent);border-color:var(--accent);color:var(--paper)}
+.side button[aria-pressed="true"].O{background:var(--warn);border-color:var(--warn);color:var(--paper)}
+.side button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.prev{margin-top:14px;padding:10px 12px;border:1px dashed var(--rule);min-height:64px}
+.prev .m{grid-template-columns:repeat(auto-fill,minmax(180px,1fr))}
+.msg{margin:10px 0 0;font-size:12.5px}
+.msg.err{color:var(--loss)} .msg.ok{color:var(--gain)}
+.note{color:var(--mute);font-size:12px;margin:8px 0 0}
+.badge{display:inline-block;padding:1px 7px;font-size:11px;border:1px solid var(--warn);color:var(--warn);margin-left:6px;font-weight:600}
+.warnbox{border:1px solid var(--warn);padding:8px 12px;margin-bottom:14px;color:var(--warn);font-size:12.5px;background:color-mix(in srgb,var(--warn) 8%,transparent)}
+.warnbox ul{margin:4px 0 0;padding-left:18px}
+.flt{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px}
+.flt>*{width:auto;min-width:130px}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.sp{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px 16px}
+.pi{width:112px!important;padding:5px 7px!important}
+.stack{display:flex;height:16px;margin:4px 0 10px;border:1px solid var(--rule)}
+.stack i{display:block;height:100%}
+.report{font-size:12.5px;margin-top:10px;max-height:260px;overflow:auto;border:1px solid var(--rule);padding:8px 12px;background:var(--field)}
+.report h4{margin:8px 0 2px;font-size:12.5px}.report ul{margin:2px 0 6px;padding-left:18px}
+
+.toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);background:var(--ink);color:var(--paper);padding:9px 18px;font-size:13px;z-index:50;max-width:92vw;
+  box-shadow:0 4px 18px rgba(0,0,0,.25)}
+@media (max-width:820px){
+  .app{grid-template-columns:1fr}
+  .rail{position:fixed;top:auto;bottom:0;left:0;right:0;height:auto;flex-direction:row;padding:0 0 env(safe-area-inset-bottom);z-index:30;border-right:0;border-top:1px solid var(--rule)}
+  .brand,.stat{display:none}
+  .rail nav{flex-direction:row;width:100%;margin:0;gap:0}
+  .rail nav button{flex:1;text-align:center;padding:12px 2px;font-size:11.5px;border-left:0;border-top:3px solid transparent}
+  .rail nav button[aria-current="page"]{border-top-color:var(--accent);border-left-color:transparent}
+  main{padding:16px 12px 92px}
+  .toast{bottom:84px}
+  .hero .big{font-size:26px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="rail">
+    <div class="brand">取引ジャーナル<small>国内現物・短期</small></div>
+    <nav id="nav" aria-label="画面切替">
+      <button data-v="dash">ダッシュボード</button>
+      <button data-v="entry">入力</button>
+      <button data-v="log">約定ログ</button>
+      <button data-v="pos">保有</button>
+      <button data-v="ana">分析・予測</button>
+      <button data-v="data">データ</button>
+    </nav>
+    <div class="stat" id="stat"></div>
+  </aside>
+
+  <main>
+    <!-- ダッシュボード -->
+    <section id="v-dash" class="view" hidden>
+      <div class="head">
+        <div><h1>ダッシュボード</h1><p id="dash-sub"></p></div>
+        <div class="tools">
+          <div class="seg" id="range" role="group" aria-label="期間">
+            <button data-r="all">全期間</button><button data-r="ytd">今年</button><button data-r="90">90日</button><button data-r="30">30日</button>
+          </div>
+          <div class="seg" data-metric role="group" aria-label="指標">
+            <button data-m="pnl">損益額</button><button data-m="net">実質額</button>
+          </div>
+        </div>
+      </div>
+      <div id="dash-warn"></div>
+      <div class="sheet"><h2>成績サマリー<span id="sum-note"></span></h2><div class="body" id="summary"></div></div>
+      <div class="sheet"><h2>累計損益の推移<span>決済日ごとの積み上げ</span></h2><div class="body"><div class="chart" id="ch-curve"></div></div></div>
+      <div class="cols">
+        <div class="sheet"><h2>月次損益<span>灰色は次月の予測(中央値と10–90%範囲)</span></h2><div class="body"><div class="chart" id="ch-month"></div></div></div>
+        <div class="sheet"><h2>曜日別の平均損益<span><span class="seg" id="wdmode" style="margin-left:6px"><button data-w="entry">エントリー曜日</button><button data-w="exit">決済曜日</button></span></span></h2><div class="body"><div class="chart" id="ch-wd"></div></div></div>
+      </div>
+      <div style="height:16px"></div>
+      <div class="cols">
+        <div class="sheet"><h2>保有日数と損益<span>短期の癖を見る</span></h2><div class="body"><div id="hold-tbl"></div><div class="chart" id="ch-hold" style="margin-top:10px"></div></div></div>
+        <div class="sheet"><h2>銘柄別の損益<span>合計・件数・勝率</span></h2><div class="body"><div class="sym" id="sym"></div></div></div>
+      </div>
+    </section>
+
+    <!-- 入力 -->
+    <section id="v-entry" class="view" hidden>
+      <div class="head"><div><h1 id="entry-title">取引を記録</h1><p>買い(エントリー)と売り(アウトプット)を1約定ずつ記録します。損益・保有・平均単価は自動計算です。</p></div></div>
+      <div class="sheet"><h2>約定入力<span id="edit-badge"></span></h2>
+        <div class="body">
+          <div class="form">
+            <div class="f w6"><span class="lab">売買</span>
+              <div class="side" id="side"><button type="button" class="E" data-s="E" aria-pressed="true">買い (エントリー)</button><button type="button" class="O" data-s="O" aria-pressed="false">売り (アウトプット)</button></div></div>
+            <div class="f w3"><label for="f-date">約定日 <span id="f-wd" class="mute"></span></label><input type="date" id="f-date"></div>
+            <div class="f w3"><label for="f-code">銘柄コード</label><input type="text" id="f-code" list="dl-code" inputmode="text" autocomplete="off" placeholder="例 8227"></div>
+            <div class="f w6"><label for="f-name">銘柄名</label><input type="text" id="f-name" list="dl-name" autocomplete="off" placeholder="例 しまむら"></div>
+            <div class="f"><label for="f-price">約定単価 (円)</label><input type="number" id="f-price" step="any" min="0" inputmode="decimal"></div>
+            <div class="f"><label for="f-qty">株数 <button type="button" class="btn ghost sm" id="f-all" hidden>全株</button></label><input type="number" id="f-qty" step="1" min="1" inputmode="numeric"></div>
+            <div class="f"><label for="f-fee">手数料 (円)</label><input type="number" id="f-fee" step="any" min="0" inputmode="decimal"></div>
+            <div class="f w6"><label for="f-memo">メモ (任意)</label><input type="text" id="f-memo" autocomplete="off" placeholder="理由・気づきなど"></div>
+          </div>
+          <datalist id="dl-code"></datalist><datalist id="dl-name"></datalist>
+          <div class="prev" id="prev"><span class="mute">銘柄・単価・株数を入れると、ここに結果が表示されます。</span></div>
+          <p class="msg" id="f-msg" role="status"></p>
+          <div class="row" style="margin-top:10px"><button class="btn" id="f-save" type="button">記録する</button><button class="btn ghost" id="f-cancel" type="button" hidden>編集をやめる</button></div>
+        </div>
+      </div>
+      <div class="sheet"><h2>直近の記録<span>入力の確認用</span></h2><div class="scroll" id="recent"></div></div>
+    </section>
+
+    <!-- 約定ログ -->
+    <section id="v-log" class="view" hidden>
+      <div class="head"><div><h1>約定ログ</h1><p id="log-sub"></p></div></div>
+      <div class="flt">
+        <select id="lg-side" aria-label="売買"><option value="">売買: すべて</option><option value="E">買い(E)</option><option value="O">売り(O)</option></select>
+        <select id="lg-code" aria-label="銘柄"><option value="">銘柄: すべて</option></select>
+        <input type="text" id="lg-q" placeholder="メモ・銘柄名で検索" aria-label="検索">
+      </div>
+      <div class="sheet"><div class="scroll" id="log"></div></div>
+    </section>
+
+    <!-- 保有 -->
+    <section id="v-pos" class="view" hidden>
+      <div class="head"><div><h1>保有ポジション</h1><p>現在値(または売却予定価格)を入れると、評価損益と実質額を試算します。入力値は保存されます。</p></div></div>
+      <div class="sheet"><h2>現在の保有<span id="pos-sum"></span></h2><div class="body"><div id="pos-share"></div></div><div class="scroll" id="pos"></div></div>
+    </section>
+
+    <!-- 分析 -->
+    <section id="v-ana" class="view" hidden>
+      <div class="head">
+        <div><h1>分析・予測</h1><p>株価ではなく、ご自身の成績を再抽出して今後の分布を見ます。</p></div>
+        <div class="tools"><div class="seg" data-metric role="group" aria-label="指標"><button data-m="pnl">損益額</button><button data-m="net">実質額</button></div></div>
+      </div>
+      <div id="ana-warn"></div>
+      <div class="sheet"><h2>今後N回の累計損益<span id="mc-note"></span></h2>
+        <div class="body">
+          <div class="row" style="margin-bottom:10px">
+            <label for="mc-h">先読みする取引回数</label><input type="number" id="mc-h" min="1" max="200" step="1" class="pi" style="width:84px!important">
+            <button class="btn ghost sm" id="mc-run" type="button">再抽出</button>
+          </div>
+          <div class="chart" id="ch-mc"></div>
+          <div id="mc-res" style="margin-top:12px"></div>
+        </div>
+      </div>
+      <div class="cols">
+        <div class="sheet"><h2>投入額の目安 (ケリー基準)</h2><div class="body" id="kelly"></div></div>
+        <div class="sheet"><h2>直近20回と全期間</h2><div class="body" id="recent-cmp"></div></div>
+      </div>
+      <div style="height:16px"></div>
+      <div class="sheet"><h2>連勝・連敗</h2><div class="body" id="streak"></div></div>
+    </section>
+
+    <!-- データ -->
+    <section id="v-data" class="view" hidden>
+      <div class="head"><div><h1>データ</h1><p>入力内容はこのブラウザに自動保存されます。JSONで書き出して保管・移行できます。</p></div></div>
+      <div class="sheet"><h2>GitHub 同期<span id="gh-note"></span></h2><div class="body">
+        <div class="sp">
+          <div class="f"><label for="gh-repo">リポジトリ (owner/repo)</label><input type="text" id="gh-repo" placeholder="you/stockdata-data" autocomplete="off" spellcheck="false"></div>
+          <div class="f"><label for="gh-path">ファイルパス</label><input type="text" id="gh-path" placeholder="trade-journal.json" autocomplete="off" spellcheck="false"></div>
+          <div class="f"><label for="gh-token">Fine-grained PAT (このブラウザにのみ保存)</label><input type="password" id="gh-token" autocomplete="off"></div>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <button class="btn" id="gh-pull" type="button">GitHub から読み込む (置き換え)</button>
+          <button class="btn ghost" id="gh-forget" type="button">PAT を削除</button>
+        </div>
+        <p class="note">起動時に自動で読み込み、ブラウザ内のデータを GitHub の内容で置き換えます。PAT は対象リポジトリ1つ・Contents: Read-only で発行してください。ここで入力した約定は「JSONを保存」→ リポジトリに commit して反映します。</p>
+      </div></div>
+      <div class="sheet"><h2>JSON出力<span id="exp-note"></span></h2><div class="body">
+        <div class="row"><button class="btn" id="exp-dl" type="button">JSONを保存</button><button class="btn ghost" id="exp-copy" type="button">クリップボードへコピー</button><button class="btn ghost" id="exp-show" type="button">内容を表示</button></div>
+        <textarea id="exp-text" readonly hidden style="margin-top:10px;min-height:200px" aria-label="出力JSON"></textarea>
+        <p class="note">出力には約定ログ・設定・現在値に加え、再計算結果 (derived: 決済済み・保有) も入ります。derived は読み取り専用で、取り込み時は無視されます。</p>
+      </div></div>
+      <div class="sheet"><h2>取り込み</h2><div class="body">
+        <div class="row" style="margin-bottom:10px">
+          <span class="lab">方法</span>
+          <label class="row" style="gap:4px"><input type="radio" name="imode" value="merge" checked> 追加 (同じIDは飛ばす)</label>
+          <label class="row" style="gap:4px"><input type="radio" name="imode" value="replace"> 置き換え</label>
+        </div>
+        <div class="row"><input type="file" id="imp-file" accept=".json,.csv,application/json,text/csv" aria-label="ファイルを選択"></div>
+        <p class="note">本アプリのJSON、または従来の stock_data.csv (datetime / F / Code / name … 形式) を自動判別して読み込みます。</p>
+        <textarea id="imp-text" placeholder="JSONを貼り付けて取り込むこともできます" style="margin-top:8px" aria-label="JSON貼り付け"></textarea>
+        <div class="row" style="margin-top:8px"><button class="btn ghost" id="imp-paste" type="button">貼り付けた内容を取り込む</button></div>
+        <div id="imp-report"></div>
+      </div></div>
+      <div class="sheet"><h2>設定</h2><div class="body">
+        <div class="sp">
+          <div class="f"><label for="s-win">実質額の率: 利益時 (%)</label><input type="number" id="s-win" step="any" min="0" max="100"></div>
+          <div class="f"><label for="s-loss">実質額の率: 損失時 (%)</label><input type="number" id="s-loss" step="any" min="0" max="200"></div>
+          <div class="f"><label for="s-fee">手数料の初期値 (円)</label><input type="number" id="s-fee" step="any" min="0"></div>
+          <div class="f"><label for="s-min">統計を参考値扱いにする件数</label><input type="number" id="s-min" step="1" min="1"></div>
+        </div>
+        <label class="row" style="gap:6px;margin-top:12px"><input type="checkbox" id="s-jp"> 色を日本式にする (利益=赤 / 損失=青)</label>
+        <p class="note">従来の「実質額 = 利益 × 0.8」は、利益時80%・損失時100%に相当します。損失側にも0.8を掛けると損失が小さく見えるため、既定では分けています。</p>
+      </div></div>
+      <div class="sheet"><h2>初期化</h2><div class="body">
+        <button class="btn danger" id="wipe" type="button">すべてのデータを削除</button>
+        <p class="note">削除前に必ずJSONを書き出してください。元には戻せません。</p>
+      </div></div>
+    </section>
+  </main>
+</div>
+<div id="toast" class="toast" role="status" hidden></div>
+
+<script>
+'use strict';
+/* ===== 基本ユーティリティ ===== */
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const WD=['日','月','火','水','木','金','土'];
+const dayNum=s=>Math.floor(Date.UTC(+s.slice(0,4),+s.slice(5,7)-1,+s.slice(8,10))/864e5);
+const fromDay=n=>new Date(n*864e5).toISOString().slice(0,10);
+const wdOf=s=>new Date(dayNum(s)*864e5).getUTCDay();
+const pad=n=>String(n).padStart(2,'0');
+const todayStr=()=>{const d=new Date();return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())};
+const yen=(v,sg)=>{if(v==null||!isFinite(v))return '–';const r=Math.round(v);return (sg&&r>0?'+':'')+(r<0?'−':'')+'¥'+Math.abs(r).toLocaleString('ja-JP')};
+const px=v=>Number(v).toLocaleString('ja-JP',{maximumFractionDigits:2});
+const pct=(v,d=1,sg)=>v==null||!isFinite(v)?'–':(sg&&v>0?'+':'')+(v<0?'−':'')+Math.abs(v).toFixed(d)+'%';
+const cls=v=>v>0?'gain':v<0?'loss':'';
+const sum=a=>a.reduce((x,y)=>x+y,0);
+const mean=a=>a.length?sum(a)/a.length:0;
+const uid=()=>(crypto.randomUUID?crypto.randomUUID():Date.now().toString(36)+Math.random().toString(36).slice(2,9));
+function normDate(s){const m=String(s||'').trim().match(/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})/);return m?m[1]+'-'+pad(+m[2])+'-'+pad(+m[3]):null}
+
+/* ===== 状態と保存 ===== */
+const KEY='tradeJournal.v1';
+const DEFAULTS=()=>({version:1,settings:{netWin:0.8,netLoss:1.0,fee:0,minN:30,jp:false,mcN:20},trades:[],marks:{},meta:{lastExport:null,seq:0}});
+let storageOK=true;
+function load(){
+  const d=DEFAULTS();
+  try{
+    const raw=localStorage.getItem(KEY);
+    if(raw){const p=JSON.parse(raw);
+      d.settings={...d.settings,...(p.settings||{})};d.trades=Array.isArray(p.trades)?p.trades:[];d.marks=p.marks||{};d.meta={...d.meta,...(p.meta||{})};}
+  }catch(e){storageOK=false}
+  d.meta.seq=Math.max(d.meta.seq||0,...d.trades.map(t=>t.seq||0));
+  return d;
+}
+let S=load();
+const UI={view:'dash',metric:'pnl',range:'all',wd:'entry',editId:null,side:'E',logLimit:100,seed:42,h:null};
+function save(){
+  try{localStorage.setItem(KEY,JSON.stringify({version:1,settings:S.settings,trades:S.trades,marks:S.marks,meta:S.meta}));storageOK=true}
+  catch(e){storageOK=false}
+  renderStatus();
+}
+let toastT;
+function toast(m){const t=$('#toast');t.textContent=m;t.hidden=false;clearTimeout(toastT);toastT=setTimeout(()=>t.hidden=true,2600)}
+
+/* ===== 計算エンジン (移動平均法) ===== */
+const keyOf=t=>t.code||t.name;
+function compute(trades,st){
+  const ts=[...trades].sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:(a.seq||0)-(b.seq||0));
+  const pos=new Map(),closed=[],info={},warns=[];
+  for(const t of ts){
+    const k=keyOf(t);let p=pos.get(k);
+    if(!p){p={code:t.code||'',name:t.name||'',qty:0,cost:0,wday:0,since:null};pos.set(k,p)}
+    if(t.name)p.name=t.name;if(t.code)p.code=t.code;
+    const day=dayNum(t.date),label=t.name||t.code;
+    if(t.side==='E'){
+      if(p.qty<=0){p.since=t.date;p.qty=0;p.cost=0;p.wday=0}
+      p.qty+=t.qty;p.cost+=t.price*t.qty+(t.fee||0);p.wday+=day*t.qty;
+      info[t.id]={afterQty:p.qty,afterCost:p.cost};
+    }else{
+      if(p.qty<=0){warns.push({id:t.id,msg:`${label}(${t.date}): 保有が無い状態で売却が記録されています`});info[t.id]={afterQty:0,afterCost:0,bad:true};continue}
+      let q=t.qty;
+      if(q>p.qty+1e-9){warns.push({id:t.id,msg:`${label}(${t.date}): 保有${p.qty}株を超える売却${q}株 → 保有数で計算`});q=p.qty;info[t.id]={bad:true}}
+      const avg=p.cost/p.qty,cost=avg*q,proceeds=t.price*q-(t.fee||0),pnl=proceeds-cost;
+      const net=pnl>=0?pnl*st.netWin:pnl*st.netLoss;
+      const c={id:t.id,date:t.date,code:p.code,name:p.name,qty:q,sell:t.price,avg,cost,proceeds,pnl,net,
+        ratio:cost>0?pnl/cost*100:0,hold:Math.max(0,day-p.wday/p.qty),entry:p.since,memo:t.memo||''};
+      closed.push(c);
+      const left=(p.qty-q)/p.qty;p.qty-=q;p.cost*=left;p.wday*=left;
+      if(p.qty<=1e-9){p.qty=0;p.cost=0;p.wday=0}
+      info[t.id]={...(info[t.id]||{}),afterQty:p.qty,afterCost:p.cost,closed:c};
+    }
+  }
+  const td=dayNum(todayStr());
+  const positions=[...pos.values()].filter(p=>p.qty>0).map(p=>({code:p.code,name:p.name,qty:p.qty,cost:p.cost,avg:p.cost/p.qty,since:p.since,hold:Math.max(0,td-p.wday/p.qty)}));
+  return {closed,positions,info,warns,posMap:pos,sorted:ts};
+}
+let C=compute([],S.settings);
+const settingsNum=()=>({netWin:+S.settings.netWin,netLoss:+S.settings.netLoss});
+
+function stats(cl,val){
+  const v=cl.map(val),n=v.length;
+  const w=v.filter(x=>x>0),l=v.filter(x=>x<0);
+  const gw=sum(w),gl=-sum(l);
+  let cum=0,peak=0,dd=0;for(const x of v){cum+=x;peak=Math.max(peak,cum);dd=Math.max(dd,peak-cum)}
+  const avgW=w.length?gw/w.length:0,avgL=l.length?gl/l.length:0;
+  let mw=0,ml=0,cw=0,cl2=0;for(const x of v){if(x>0){cw++;cl2=0}else if(x<0){cl2++;cw=0}else{cw=0;cl2=0}mw=Math.max(mw,cw);ml=Math.max(ml,cl2)}
+  return {n,wins:w.length,losses:l.length,total:sum(v),winRate:n?w.length/n:0,avgW,avgL,
+    payoff:avgL?avgW/avgL:null,pf:gl?gw/gl:(gw>0?Infinity:null),exp:n?sum(v)/n:0,
+    maxDD:dd,maxW:mw,maxL:ml,curW:cw,curL:cl2,avgHold:mean(cl.map(c=>c.hold)),avgRatio:mean(cl.map(c=>c.ratio)),
+    best:n?Math.max(...v):0,worst:n?Math.min(...v):0};
+}
+const valFn=()=>UI.metric==='net'?(c=>c.net):(c=>c.pnl);
+function filteredClosed(){
+  const t=todayStr();let from='0000-00-00';
+  if(UI.range==='ytd')from=t.slice(0,4)+'-01-01';
+  else if(UI.range==='90')from=fromDay(dayNum(t)-90);
+  else if(UI.range==='30')from=fromDay(dayNum(t)-30);
+  return C.closed.filter(c=>c.date>=from);
+}
+
+/* ===== 予測 (ブートストラップ) ===== */
+function rng(seed){let a=seed>>>0;return()=>{a=(a+0x6D2B79F5)|0;let t=Math.imul(a^(a>>>15),1|a);t=(t+Math.imul(t^(t>>>7),61|t))^t;return((t^(t>>>14))>>>0)/4294967296}}
+function mc(vals,H,S_=4000,seed=42){
+  const r=rng(seed),n=vals.length,cols=Array.from({length:H},()=>new Float64Array(S_));
+  for(let s=0;s<S_;s++){let c=0;for(let h=0;h<H;h++){c+=vals[Math.floor(r()*n)];cols[h][s]=c}}
+  const q=(a,p)=>a[Math.min(S_-1,Math.max(0,Math.round(p*(S_-1))))];
+  const out={p5:[],p10:[],p25:[],p50:[],p75:[],p90:[],p95:[],mean:[]};
+  cols.forEach(a=>{a.sort();out.p5.push(q(a,.05));out.p10.push(q(a,.1));out.p25.push(q(a,.25));out.p50.push(q(a,.5));out.p75.push(q(a,.75));out.p90.push(q(a,.9));out.p95.push(q(a,.95));out.mean.push(mean(Array.from(a)))});
+  const last=cols[H-1];let neg=0;for(let i=0;i<S_;i++)if(last[i]<0)neg++;
+  out.pLoss=neg/S_;return out;
+}
+function tradesPerMonth(){
+  const cl=C.closed;if(!cl.length)return 0;
+  const last=dayNum(cl[cl.length-1].date),first=dayNum(cl[0].date);
+  const span=Math.max(30,Math.min(183,last-first+1));
+  const cnt=cl.filter(c=>dayNum(c.date)>last-span).length;
+  return cnt/(span/30.44);
+}
+
+/* ===== チャート (SVG) ===== */
+function niceTicks(min,max,n=5){
+  if(min===max){min-=1;max+=1}
+  const step0=(max-min)/n,mag=Math.pow(10,Math.floor(Math.log10(step0))),nm=step0/mag;
+  const step=(nm<1.5?1:nm<3?2:nm<7?5:10)*mag,out=[];
+  for(let v=Math.floor(min/step)*step;v<=max+step*.5;v+=step)out.push(+v.toFixed(10));
+  return out;
+}
+const yfmtDef=v=>Math.abs(v)>=1e4?+(v/1e4).toFixed(2)+'万':String(+v.toFixed(2));
+function plotBase(el,o){
+  const W=Math.max(300,Math.floor(el.clientWidth||620)),H=o.h||240,m={l:o.ml||54,r:12,t:12,b:o.mb||26};
+  let[x0,x1]=o.x;if(x0===x1){x0-=1;x1+=1}
+  let[y0,y1]=o.y;y0=Math.min(y0,0);y1=Math.max(y1,0);
+  const yt=niceTicks(y0,y1,o.yn||5);y0=yt[0];y1=yt[yt.length-1];
+  const X=v=>m.l+(v-x0)/(x1-x0)*(W-m.l-m.r),Y=v=>m.t+(1-(v-y0)/(y1-y0))*(H-m.t-m.b);
+  const yf=o.yfmt||yfmtDef;let g='';
+  yt.forEach(v=>{g+=`<line class="gl${v===0?' z':''}" x1="${m.l}" x2="${W-m.r}" y1="${Y(v)}" y2="${Y(v)}"/><text class="al" x="${m.l-6}" y="${Y(v)+4}" text-anchor="end">${esc(yf(v))}</text>`});
+  (o.xt||[]).forEach(t=>{g+=`<line class="gl v" x1="${X(t.x)}" x2="${X(t.x)}" y1="${m.t}" y2="${H-m.b}"/><text class="al" x="${X(t.x)}" y="${H-m.b+16}" text-anchor="middle">${esc(t.label)}</text>`});
+  return {W,H,m,X,Y,g};
+}
+const svgWrap=(b,body,label)=>`<svg viewBox="0 0 ${b.W} ${b.H}" width="${b.W}" height="${b.H}" role="img" aria-label="${esc(label)}">${body}</svg>`;
+const empty=(el,msg='決済済みの取引がまだありません')=>{el.innerHTML=`<p class="empty">${msg}</p>`};
+function timeTicks(x0,x1,n=5){const out=[];if(x1<=x0)return[{x:x0,label:fromDay(x0).slice(2,7).replace('-','/')}];for(let i=0;i<n;i++){const x=Math.round(x0+(x1-x0)*i/(n-1));out.push({x,label:fromDay(x).slice(2,7).replace('-','/')})}return out}
+
+function lineChart(el,o){
+  const ys=[],xs=[];
+  o.series.forEach(s=>s.pts.forEach(p=>{xs.push(p[0]);ys.push(p[1])}));
+  (o.bands||[]).forEach(b=>b.pts.forEach(p=>{xs.push(p[0]);ys.push(p[1],p[2])}));
+  if(!xs.length)return empty(el);
+  const b=plotBase(el,{x:[Math.min(...xs),Math.max(...xs)],y:[Math.min(...ys),Math.max(...ys)],h:o.h,xt:o.xt&&o.xt(Math.min(...xs),Math.max(...xs)),yfmt:o.yfmt});
+  let body=b.g;
+  (o.bands||[]).forEach(bd=>{
+    const up=bd.pts.map(p=>`${b.X(p[0])},${b.Y(p[2])}`),lo=bd.pts.slice().reverse().map(p=>`${b.X(p[0])},${b.Y(p[1])}`);
+    body+=`<polygon class="${bd.cls||'band'}" points="${up.concat(lo).join(' ')}"/>`;
+  });
+  o.series.forEach(s=>{
+    let d='';
+    s.pts.forEach((p,i)=>{
+      if(i===0)d+=`M${b.X(p[0])},${b.Y(p[1])}`;
+      else d+=(s.step?`L${b.X(p[0])},${b.Y(s.pts[i-1][1])}`:'')+`L${b.X(p[0])},${b.Y(p[1])}`;
+    });
+    if(s.area&&s.pts.length>1){const f=s.pts[0],l=s.pts[s.pts.length-1];body+=`<path class="area" d="${d}L${b.X(l[0])},${b.Y(0)}L${b.X(f[0])},${b.Y(0)}Z"/>`}
+    body+=`<path class="ln ${s.cls||'c-acc'}${s.dash?' dash':''}" d="${d}"/>`;
+    if(s.dots&&s.pts.length<=120)s.pts.forEach((p,i)=>{body+=`<circle cx="${b.X(p[0])}" cy="${b.Y(p[1])}" r="3" class="${p[1]>=0?'dot-g':'dot-l'}"><title>${esc(s.tip?s.tip(p,i):'')}</title></circle>`});
+  });
+  if(o.endLabel){const s=o.series[0],p=s.pts[s.pts.length-1];const right=b.X(p[0])>b.W-90;
+    body+=`<circle cx="${b.X(p[0])}" cy="${b.Y(p[1])}" r="4" fill="var(--ink)"/><text class="lbl" x="${b.X(p[0])+(right?-8:8)}" y="${Math.max(14,b.Y(p[1])-8)}" text-anchor="${right?'end':'start'}">${esc(o.endLabel(p))}</text>`}
+  el.innerHTML=svgWrap(b,body,o.label||'折れ線グラフ');
+}
+
+function barChart(el,o){
+  const it=o.items;if(!it.length)return empty(el,o.empty);
+  const vals=[];it.forEach(i=>{vals.push(i.value);if(i.range)vals.push(...i.range)});
+  const b=plotBase(el,{x:[0,it.length],y:[Math.min(...vals),Math.max(...vals)],h:o.h||230,mb:o.sub?42:26});
+  let body=b.g;const bw=(b.W-b.m.l-b.m.r)/it.length,w=Math.min(46,bw*.62);
+  const every=Math.max(1,Math.ceil(it.length*(o.lw||34)/(b.W-b.m.l-b.m.r)));
+  if(o.avg!=null&&isFinite(o.avg))body+=`<line class="c-dim dash" style="stroke-width:1.2" x1="${b.m.l}" x2="${b.W-b.m.r}" y1="${b.Y(o.avg)}" y2="${b.Y(o.avg)}"/><text class="al" x="${b.W-b.m.r-2}" y="${b.Y(o.avg)-4}" text-anchor="end">平均 ${esc(yfmtDef(o.avg))}</text>`;
+  it.forEach((i,k)=>{
+    const cx=b.X(k+.5),y0=b.Y(0),y1=b.Y(i.value),top=Math.min(y0,y1),h=Math.max(1,Math.abs(y1-y0));
+    const c=i.ghost?'f-ghost':(i.mute?'f-mute':(i.value>=0?'f-gain':'f-loss'));
+    body+=`<rect class="${c}" x="${cx-w/2}" y="${top}" width="${w}" height="${h}"><title>${esc(i.title||'')}</title></rect>`;
+    if(i.range)body+=`<line class="wh" x1="${cx}" x2="${cx}" y1="${b.Y(i.range[0])}" y2="${b.Y(i.range[1])}"/><line class="wh" x1="${cx-5}" x2="${cx+5}" y1="${b.Y(i.range[0])}" y2="${b.Y(i.range[0])}"/><line class="wh" x1="${cx-5}" x2="${cx+5}" y1="${b.Y(i.range[1])}" y2="${b.Y(i.range[1])}"/>`;
+    if(k%every===0||k===it.length-1)body+=`<text class="al" x="${cx}" y="${b.H-b.m.b+15}" text-anchor="middle">${esc(i.label)}</text>`;
+    if(o.sub&&i.sub)body+=`<text class="al" x="${cx}" y="${b.H-b.m.b+29}" text-anchor="middle">${esc(i.sub)}</text>`;
+  });
+  el.innerHTML=svgWrap(b,body,o.label||'棒グラフ');
+}
+
+function scatter(el,pts){
+  if(!pts.length)return empty(el);
+  const xs=pts.map(p=>p.x),ys=pts.map(p=>p.y);
+  const xmax=Math.max(4,Math.ceil(Math.max(...xs)/4)*4);
+  const b=plotBase(el,{x:[0,xmax],y:[Math.min(...ys),Math.max(...ys)],h:230,xt:[0,1,2,3,4].map(i=>({x:xmax*i/4,label:(xmax*i/4)+'日'}))});
+  let body=b.g;
+  pts.forEach(p=>{body+=`<circle cx="${b.X(p.x)}" cy="${b.Y(p.y)}" r="4" class="${p.y>=0?'dot-g':'dot-l'}"><title>${esc(p.t)}</title></circle>`});
+  el.innerHTML=svgWrap(b,body,'保有日数と損益の散布図');
+}
+
+/* ===== 画面: ダッシュボード ===== */
+function lowBadge(n){return n<S.settings.minN?`<span class="badge">参考値 n=${n}</span>`:''}
+function renderDash(){
+  const val=valFn(),cl=filteredClosed(),st=stats(cl,val),all=C.closed;
+  const rl={all:'全期間',ytd:'今年',90:'直近90日',30:'直近30日'}[UI.range];
+  $('#dash-sub').textContent=`${rl}・決済${st.n}件・${UI.metric==='net'?'実質額':'損益額(税引前)'}ベース`;
+  $('#sum-note').innerHTML=lowBadge(st.n);
+  const warnEl=$('#dash-warn');
+  warnEl.innerHTML=C.warns.length?`<div class="warnbox">記録に不整合があります (${C.warns.length}件)。約定ログの赤い行を確認してください。<ul>${C.warns.slice(0,4).map(w=>`<li>${esc(w.msg)}</li>`).join('')}</ul></div>`:'';
+  const posCost=sum(C.positions.map(p=>p.cost));
+  $('#summary').innerHTML=`
+    <div class="hero"><div class="big ${cls(st.total)}">${yen(st.total,true)}</div>
+      <div class="sub">${st.n?`${st.wins}勝${st.losses}敗${st.n-st.wins-st.losses?`${st.n-st.wins-st.losses}分`:''} / 勝率 ${(st.winRate*100).toFixed(1)}%`:'決済済みの取引がまだありません'}</div></div>
+    <dl class="m">
+      <div><dt>期待値 / 1回</dt><dd class="${cls(st.exp)}">${yen(st.exp,true)}</dd></div>
+      <div><dt>プロフィットファクター</dt><dd>${st.pf==null?'–':st.pf===Infinity?'∞':st.pf.toFixed(2)}</dd></div>
+      <div><dt>ペイオフ比 (平均利益÷平均損失)</dt><dd>${st.payoff==null?'–':st.payoff.toFixed(2)}</dd></div>
+      <div><dt>平均利益 / 損失</dt><dd><span class="gain">${yen(st.avgW)}</span> / <span class="loss">${yen(-st.avgL)}</span></dd></div>
+      <div><dt>最大ドローダウン</dt><dd class="loss">${st.maxDD?yen(-st.maxDD):'–'}</dd></div>
+      <div><dt>平均効率 (損益/取得額)</dt><dd class="${cls(st.avgRatio)}">${pct(st.avgRatio,2,true)}</dd></div>
+      <div><dt>平均保有日数</dt><dd>${st.n?st.avgHold.toFixed(1)+'日':'–'}</dd></div>
+      <div><dt>最大利益 / 損失</dt><dd><span class="gain">${yen(st.best)}</span> / <span class="loss">${yen(st.worst)}</span></dd></div>
+      <div><dt>保有中の取得額</dt><dd>${yen(posCost)} (${C.positions.length}銘柄)</dd></div>
+    </dl>`;
+  // 累計曲線
+  let cum=0;const pts=[];
+  cl.slice().sort((a,b)=>a.date<b.date?-1:1).forEach(c=>{cum+=val(c);pts.push([dayNum(c.date),cum,c])});
+  if(pts.length)pts.unshift([pts[0][0]-1,0,null]);
+  lineChart($('#ch-curve'),{series:[{pts,step:true,area:true,cls:'c-acc',dots:true,tip:p=>p[2]?`${p[2].date} ${p[2].name} ${yen(val(p[2]),true)} → 累計 ${yen(p[1],true)}`:''}],
+    xt:timeTicks,endLabel:p=>yen(p[1],true),h:250,label:'累計損益の推移'});
+  // 月次
+  const mo={};cl.forEach(c=>{const k=c.date.slice(0,7);mo[k]=(mo[k]||0)+val(c)});
+  const keys=Object.keys(mo).sort();const items=[];
+  if(keys.length){let [y,m]=keys[0].split('-').map(Number);const [ly,lm]=keys[keys.length-1].split('-').map(Number);
+    while(y<ly||(y===ly&&m<=lm)){const k=y+'-'+pad(m);items.push({label:k.slice(2).replace('-','/'),value:mo[k]||0,title:`${k}: ${yen(mo[k]||0,true)}`});m++;if(m>12){m=1;y++}}}
+  let fc='';
+  if(cl.length>=5&&items.length){
+    const H=Math.max(1,Math.round(tradesPerMonth())),r=mc(cl.map(val),H,3000,UI.seed);
+    let[y,m]=keys[keys.length-1].split('-').map(Number);m++;if(m>12){m=1;y++}
+    items.push({label:(y+'').slice(2)+'/'+pad(m),value:r.p50[H-1],range:[r.p10[H-1],r.p90[H-1]],ghost:true,title:`予測(${H}回想定) 中央値 ${yen(r.p50[H-1],true)} / 10–90%: ${yen(r.p10[H-1])} 〜 ${yen(r.p90[H-1])}`});
+  }
+  barChart($('#ch-month'),{items,avg:keys.length?mean(Object.values(mo)):null,label:'月次損益'});
+  // 曜日
+  const wdB=[1,2,3,4,5].map(d=>({d,v:[]}));
+  cl.forEach(c=>{const ds=UI.wd==='entry'?(c.entry||c.date):c.date;const w=wdOf(ds);const b=wdB.find(x=>x.d===w);if(b)b.v.push(val(c))});
+  barChart($('#ch-wd'),{items:wdB.map(b=>({label:WD[b.d]+'曜',sub:b.v.length?`n=${b.v.length} 勝${Math.round(b.v.filter(x=>x>0).length/b.v.length*100)}%`:'n=0',value:b.v.length?mean(b.v):0,mute:b.v.length<5,title:`${WD[b.d]}曜 平均 ${yen(mean(b.v),true)} (${b.v.length}件)`})),sub:true,lw:60,label:'曜日別の平均損益',empty:'データがありません'});
+  // 保有日数
+  const bk=[['当日',c=>c.hold<.5],['1–3日',c=>c.hold>=.5&&c.hold<=3.5],['4–7日',c=>c.hold>3.5&&c.hold<=7.5],['8日〜',c=>c.hold>7.5]];
+  $('#hold-tbl').innerHTML=`<div class="scroll"><table><thead><tr><th>保有期間</th><th class="n">件数</th><th class="n">勝率</th><th class="n">平均損益</th><th class="n">合計</th></tr></thead><tbody>${bk.map(([nm,f])=>{const v=cl.filter(f).map(val);return `<tr><td>${nm}</td><td class="n">${v.length}</td><td class="n">${v.length?Math.round(v.filter(x=>x>0).length/v.length*100)+'%':'–'}</td><td class="n ${cls(mean(v))}">${v.length?yen(mean(v),true):'–'}</td><td class="n ${cls(sum(v))}">${v.length?yen(sum(v),true):'–'}</td></tr>`}).join('')}</tbody></table></div>`;
+  scatter($('#ch-hold'),cl.map(c=>({x:c.hold,y:val(c),t:`${c.date} ${c.name} 保有${c.hold.toFixed(1)}日 ${yen(val(c),true)}`})));
+  // 銘柄別
+  const by={};cl.forEach(c=>{const k=c.name||c.code;(by[k]=by[k]||{name:k,code:c.code,v:[]}).v.push(val(c))});
+  const rows=Object.values(by).map(r=>({...r,t:sum(r.v)})).sort((a,b)=>b.t-a.t);
+  const mx=Math.max(1,...rows.map(r=>Math.abs(r.t)));
+  $('#sym').innerHTML=rows.length?rows.map(r=>{const w=Math.abs(r.t)/mx*50;return `<div class="r"><div class="nm" title="${esc(r.name)} ${esc(r.code)}">${esc(r.name)}</div><div class="bar"><i style="${r.t>=0?`left:50%;width:${w}%;background:var(--gain)`:`right:50%;width:${w}%;background:var(--loss)`}"></i></div><div class="v ${cls(r.t)}">${yen(r.t,true)}<small class="mute">${r.v.length}件・勝${Math.round(r.v.filter(x=>x>0).length/r.v.length*100)}%</small></div></div>`}).join(''):'<p class="empty">決済済みの取引がまだありません</p>';
+}
+
+/* ===== 画面: 入力 ===== */
+const keyFor=(code,name)=>code||name;
+function knownMaps(){
+  const byCode={},byName={};
+  C.sorted.forEach(t=>{if(t.code&&t.name){byCode[t.code]=t.name;byName[t.name]=t.code}});
+  return {byCode,byName};
+}
+function refreshLists(){
+  const {byCode}=knownMaps();
+  $('#dl-code').innerHTML=Object.keys(byCode).sort().map(c=>`<option value="${esc(c)}">${esc(byCode[c])}</option>`).join('');
+  $('#dl-name').innerHTML=Object.values(byCode).sort().map(n=>`<option value="${esc(n)}"></option>`).join('');
+  const sel=$('#lg-code'),cur=sel.value;
+  const names=[...new Set(C.sorted.map(t=>t.name||t.code))].sort();
+  sel.innerHTML='<option value="">銘柄: すべて</option>'+names.map(n=>`<option>${esc(n)}</option>`).join('');
+  sel.value=names.includes(cur)?cur:'';
+}
+function readForm(){
+  return {side:UI.side,date:$('#f-date').value,code:$('#f-code').value.trim(),name:$('#f-name').value.trim(),
+    price:parseFloat($('#f-price').value),qty:parseFloat($('#f-qty').value),fee:parseFloat($('#f-fee').value)||0,memo:$('#f-memo').value.trim()};
+}
+function setSide(s){
+  UI.side=s;$$('#side button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.s===s));
+  $('#f-all').hidden=s!=='O';updatePreview();
+}
+function updatePreview(){
+  const f=readForm(),el=$('#prev');
+  $('#f-wd').textContent=f.date?`(${WD[wdOf(f.date)]})`:'';
+  const p=C.posMap.get(keyFor(f.code,f.name));
+  const held=p&&p.qty>0?p:null;
+  $('#f-all').disabled=!held;
+  if(!(f.price>0&&f.qty>0&&(f.code||f.name))){el.innerHTML='<span class="mute">銘柄・単価・株数を入れると、ここに結果が表示されます。</span>';return}
+  if(f.side==='E'){
+    const q=(held?held.qty:0)+f.qty,c=(held?held.cost:0)+f.price*f.qty+f.fee;
+    el.innerHTML=`<dl class="m"><div><dt>今回の金額</dt><dd>${yen(f.price*f.qty)}</dd></div><div><dt>トータル枚数</dt><dd>${q.toLocaleString('ja-JP')}株</dd></div><div><dt>トータル額</dt><dd>${yen(c)}</dd></div><div><dt>平均取得単価</dt><dd>${px(c/q)}円</dd></div></dl>`;
+  }else if(!held){
+    el.innerHTML='<span class="loss">この銘柄の保有が見つかりません。コード・銘柄名を確認してください。</span>';
+  }else{
+    const q=Math.min(f.qty,held.qty),avg=held.cost/held.qty,cost=avg*q,pnl=f.price*q-f.fee-cost;
+    const net=pnl>=0?pnl*S.settings.netWin:pnl*S.settings.netLoss;
+    el.innerHTML=`<dl class="m"><div><dt>保有 / 平均取得単価</dt><dd>${held.qty.toLocaleString('ja-JP')}株 / ${px(avg)}円</dd></div><div><dt>損益額</dt><dd class="${cls(pnl)}">${yen(pnl,true)}</dd></div><div><dt>効率 (損益/取得額)</dt><dd class="${cls(pnl)}">${pct(cost?pnl/cost*100:0,2,true)}</dd></div><div><dt>実質額</dt><dd class="${cls(net)}">${yen(net,true)}</dd></div><div><dt>売却後の残り</dt><dd>${(held.qty-q).toLocaleString('ja-JP')}株</dd></div></dl>${f.qty>held.qty?'<p class="msg err">保有数を超えています。</p>':''}`;
+  }
+}
+function msg(t,kind){const e=$('#f-msg');e.textContent=t||'';e.className='msg '+(kind||'')}
+function resetForm(keepDate){
+  UI.editId=null;
+  ['#f-code','#f-name','#f-price','#f-qty','#f-memo'].forEach(s=>$(s).value='');
+  $('#f-fee').value=S.settings.fee||'';
+  if(!keepDate)$('#f-date').value=todayStr();
+  $('#f-save').textContent='記録する';$('#f-cancel').hidden=true;$('#edit-badge').innerHTML='';$('#entry-title').textContent='取引を記録';
+  updatePreview();
+}
+function saveTrade(){
+  const f=readForm();msg('');
+  if(!normDate(f.date))return msg('約定日を入力してください','err');
+  if(!f.code&&!f.name)return msg('銘柄コードか銘柄名を入力してください','err');
+  if(!(f.price>0))return msg('約定単価を入力してください','err');
+  if(!(f.qty>0)||!Number.isFinite(f.qty))return msg('株数を入力してください','err');
+  const {byCode,byName}=knownMaps();
+  if(!f.name&&f.code&&byCode[f.code])f.name=byCode[f.code];
+  if(!f.code&&f.name&&byName[f.name])f.code=byName[f.name];
+  const prev=S.trades.map(t=>({...t}));
+  const t={id:UI.editId||uid(),date:f.date,side:f.side,code:f.code,name:f.name,price:f.price,qty:f.qty,fee:f.fee,memo:f.memo};
+  if(UI.editId){const i=S.trades.findIndex(x=>x.id===UI.editId);t.seq=S.trades[i].seq;S.trades[i]=t}
+  else{t.seq=++S.meta.seq;S.trades.push(t)}
+  const res=compute(S.trades,settingsNum()),bad=res.warns.find(w=>w.id===t.id);
+  if(bad){S.trades=prev;return msg(bad.msg+'。保存しませんでした。','err')}
+  const wasEdit=!!UI.editId;
+  save();refreshAll();resetForm(true);
+  msg(wasEdit?'更新しました':'記録しました','ok');toast(wasEdit?'更新しました':'記録しました');
+  renderRecent();
+}
+function editTrade(id){
+  const t=S.trades.find(x=>x.id===id);if(!t)return;
+  UI.editId=id;go('entry');setSide(t.side);
+  $('#f-date').value=t.date;$('#f-code').value=t.code;$('#f-name').value=t.name;$('#f-price').value=t.price;$('#f-qty').value=t.qty;$('#f-fee').value=t.fee||'';$('#f-memo').value=t.memo||'';
+  $('#f-save').textContent='更新する';$('#f-cancel').hidden=false;$('#edit-badge').innerHTML='<span class="badge">編集中</span>';$('#entry-title').textContent='取引を編集';
+  updatePreview();window.scrollTo({top:0});
+}
+function deleteTrade(id){
+  const t=S.trades.find(x=>x.id===id);if(!t)return;
+  if(!confirm(`${t.date} ${t.name||t.code} ${t.side==='E'?'買い':'売り'} ${t.qty}株 を削除します。よろしいですか？`))return;
+  const prev=S.trades;S.trades=S.trades.filter(x=>x.id!==id);
+  const after=compute(S.trades,settingsNum());
+  if(after.warns.length>compute(prev,settingsNum()).warns.length&&!confirm('削除すると他の記録に不整合が出ます(売却が保有を超える等)。それでも削除しますか？')){S.trades=prev;return}
+  save();refreshAll();toast('削除しました');
+}
+function tradeRow(t,withAct){
+  const i=C.info[t.id]||{},c=i.closed,warn=C.warns.some(w=>w.id===t.id);
+  return `<tr class="${warn?'bad':''}"><td>${t.date}(${WD[wdOf(t.date)]})</td><td><span class="tag ${t.side}">${t.side}</span></td><td>${esc(t.name||'')} <span class="mute">${esc(t.code||'')}</span></td>
+    <td class="n">${px(t.price)}</td><td class="n">${t.qty.toLocaleString('ja-JP')}</td><td class="n">${yen(t.price*t.qty)}</td>
+    <td class="n">${i.afterQty!=null?i.afterQty.toLocaleString('ja-JP'):'–'}</td><td class="n">${i.afterCost!=null?yen(i.afterCost):'–'}</td>
+    <td class="n ${c?cls(c.pnl):''}">${c?yen(c.pnl,true):''}</td><td class="n ${c?cls(c.pnl):''}">${c?pct(c.ratio,2,true):''}</td><td class="n ${c?cls(c.net):''}">${c?yen(c.net,true):''}</td>
+    ${withAct?`<td class="act"><button data-edit="${t.id}">編集</button><button class="del" data-del="${t.id}">削除</button></td>`:''}</tr>`;
+}
+const LOG_HEAD=a=>`<table><thead><tr><th>日付</th><th>E/O</th><th>銘柄</th><th class="n">単価</th><th class="n">株数</th><th class="n">金額</th><th class="n">保有株数</th><th class="n">取得額計</th><th class="n">損益額</th><th class="n">効率</th><th class="n">実質額</th>${a?'<th></th>':''}</tr></thead>`;
+function renderRecent(){
+  const rows=C.sorted.slice().reverse().slice(0,6);
+  $('#recent').innerHTML=rows.length?LOG_HEAD(false)+'<tbody>'+rows.map(t=>tradeRow(t,false)).join('')+'</tbody></table>':'<p class="empty">まだ記録がありません</p>';
+}
+function renderLog(){
+  const side=$('#lg-side').value,code=$('#lg-code').value,q=$('#lg-q').value.trim().toLowerCase();
+  let rows=C.sorted.slice().reverse().filter(t=>(!side||t.side===side)&&(!code||(t.name||t.code)===code)&&(!q||((t.memo||'')+(t.name||'')+(t.code||'')).toLowerCase().includes(q)));
+  const total=rows.length;rows=rows.slice(0,UI.logLimit);
+  $('#log-sub').textContent=`全${S.trades.length}件${total!==S.trades.length?`・表示条件に合う${total}件`:''}`;
+  $('#log').innerHTML=rows.length?LOG_HEAD(true)+'<tbody>'+rows.map(t=>tradeRow(t,true)).join('')+'</tbody></table>'+(total>rows.length?`<p class="note" style="padding:8px 12px"><button class="btn ghost sm" id="more" type="button">さらに表示 (残り${total-rows.length}件)</button></p>`:''):'<p class="empty">記録がありません</p>';
+}
+
+/* ===== 画面: 保有 ===== */
+function renderPos(){
+  const ps=C.positions.slice().sort((a,b)=>b.cost-a.cost),tot=sum(ps.map(p=>p.cost));
+  $('#pos-sum').textContent=ps.length?`${ps.length}銘柄・取得額 ${yen(tot)}`:'';
+  const pal=['var(--accent)','var(--gain)','var(--warn)','var(--loss)','var(--mute)','#7a5fb0','#2d9aa6','#a05a8a'];
+  $('#pos-share').innerHTML=ps.length?`<div class="stack" role="img" aria-label="取得額の構成比">${ps.map((p,i)=>`<i title="${esc(p.name)} ${(p.cost/tot*100).toFixed(1)}%" style="width:${p.cost/tot*100}%;background:${pal[i%pal.length]}"></i>`).join('')}</div>
+    <div class="row" style="font-size:12px">${ps.map((p,i)=>`<span><i style="display:inline-block;width:9px;height:9px;background:${pal[i%pal.length]};margin-right:4px"></i>${esc(p.name)} ${(p.cost/tot*100).toFixed(0)}%</span>`).join('')}</div>`:'';
+  $('#pos').innerHTML=ps.length?`<table><thead><tr><th>銘柄</th><th>初回エントリー</th><th class="n">保有日数</th><th class="n">株数</th><th class="n">平均取得単価</th><th class="n">取得額</th><th class="n">現在値/売却予定</th><th class="n">評価損益</th><th class="n">効率</th><th class="n">実質額</th></tr></thead><tbody>${ps.map(p=>{
+    const k=keyFor(p.code,p.name),m=S.marks[k];
+    return `<tr><td>${esc(p.name)} <span class="mute">${esc(p.code)}</span></td><td>${p.since||''}</td><td class="n">${p.hold.toFixed(1)}日</td><td class="n">${p.qty.toLocaleString('ja-JP')}</td><td class="n">${px(p.avg)}</td><td class="n">${yen(p.cost)}</td>
+      <td class="n"><input class="pi" type="number" step="any" min="0" inputmode="decimal" data-mark="${esc(k)}" value="${m||''}" aria-label="${esc(p.name)}の現在値"></td>
+      <td class="n" data-o="pnl-${esc(k)}"></td><td class="n" data-o="r-${esc(k)}"></td><td class="n" data-o="n-${esc(k)}"></td></tr>`}).join('')}</tbody></table>`:'<p class="empty">現在の保有はありません</p>';
+  ps.forEach(p=>calcMark(keyFor(p.code,p.name)));
+}
+function calcMark(k){
+  const p=C.positions.find(x=>keyFor(x.code,x.name)===k),m=parseFloat(S.marks[k]);
+  const set=(id,h,c)=>{const e=document.querySelector(`[data-o="${CSS.escape(id)}"]`);if(e){e.innerHTML=h;e.className='n '+(c||'')}};
+  if(!p||!(m>0)){set('pnl-'+k,'');set('r-'+k,'');set('n-'+k,'');return}
+  const pnl=m*p.qty-p.cost,net=pnl>=0?pnl*S.settings.netWin:pnl*S.settings.netLoss;
+  set('pnl-'+k,yen(pnl,true),cls(pnl));set('r-'+k,pct(pnl/p.cost*100,2,true),cls(pnl));set('n-'+k,yen(net,true),cls(net));
+}
+
+/* ===== 画面: 分析 ===== */
+function renderAna(){
+  const val=valFn(),cl=C.closed,vals=cl.map(val),st=stats(cl,val);
+  $('#ana-warn').innerHTML=st.n<S.settings.minN?`<div class="warnbox">決済件数が${st.n}件です。${S.settings.minN}件に満たないため、以下はすべて参考値として見てください。件数が増えるほど分布は安定します。</div>`:'';
+  const H=Math.max(1,Math.min(200,Math.round(+$('#mc-h').value||S.settings.mcN)));
+  if(st.n<3){empty($('#ch-mc'),'決済が3件以上たまると、今後の分布を試算できます');$('#mc-res').innerHTML='';$('#mc-note').textContent=''}
+  else{
+    const r=mc(vals,H,4000,UI.seed);
+    let c0=0;const act=[];vals.forEach(v=>{c0+=v;act.push(c0)});
+    const K=Math.min(30,act.length),base=act[act.length-1];
+    const apts=act.slice(-K).map((y,i)=>[i-(K-1),y]);
+    const fan=(lo,hi)=>({pts:[[0,base,base]].concat(r[hi].map((_,i)=>[i+1,base+r[lo][i],base+r[hi][i]]))});
+    lineChart($('#ch-mc'),{series:[{pts:apts,cls:'c-ink'},{pts:[[0,base]].concat(r.p50.map((v,i)=>[i+1,base+v])),cls:'c-acc',dash:true}],
+      bands:[{...fan('p10','p90'),cls:'band2'},{...fan('p25','p75'),cls:'band'}],
+      xt:(a,b)=>{const m=Math.round(b/2),xs=[a,0,m,b].filter((x,i,ar)=>ar.indexOf(x)===i&&(x===0||x===a||x===b||(m>2&&x===m)));return xs.map(x=>({x,label:x===0?'現在':(x>0?'+':'')+x+'回'}))},h:260,label:'今後の累計損益の分布'});
+    $('#mc-note').innerHTML=`${st.n}件の実績を4,000回再抽出${lowBadge(st.n)}`;
+    $('#mc-res').innerHTML=`<dl class="m">
+      <div><dt>${H}回後の中央値</dt><dd class="${cls(r.p50[H-1])}">${yen(r.p50[H-1],true)}</dd></div>
+      <div><dt>期待値 (平均)</dt><dd class="${cls(r.mean[H-1])}">${yen(r.mean[H-1],true)}</dd></div>
+      <div><dt>中位50%の範囲</dt><dd>${yen(r.p25[H-1],true)} 〜 ${yen(r.p75[H-1],true)}</dd></div>
+      <div><dt>10–90%の範囲</dt><dd>${yen(r.p10[H-1],true)} 〜 ${yen(r.p90[H-1],true)}</dd></div>
+      <div><dt>悪い側5%の水準</dt><dd class="loss">${yen(r.p5[H-1],true)}</dd></div>
+      <div><dt>マイナスで終わる確率</dt><dd>${(r.pLoss*100).toFixed(1)}%</dd></div></dl>
+      <p class="note">過去の損益をそのまま無作為に引き直した試算です。相場環境の変化や、取引ごとの投入額の違いは反映されません。</p>`;
+  }
+  // ケリー
+  if(st.n&&st.payoff!=null&&st.avgL>0){
+    const W=st.winRate,R=st.payoff,f=W-(1-W)/R;
+    $('#kelly').innerHTML=`<dl class="m" style="grid-template-columns:1fr"><div><dt>勝率 / ペイオフ比</dt><dd>${(W*100).toFixed(1)}% / ${R.toFixed(2)}</dd></div><div><dt>ケリー値</dt><dd class="${cls(f)}">${(f*100).toFixed(1)}%</dd></div><div><dt>ハーフケリー</dt><dd class="${cls(f)}">${(f/2*100).toFixed(1)}%</dd></div></dl>
+      <p class="note">${f>0?`1回の想定損失(平均 ${yen(st.avgL)}程度)を、運用資金の${(f/2*100).toFixed(1)}%以内に収める、が目安です。`:'現在の成績では、ケリー基準は「投入しない」を示しています。'}ケリー値は標本が少ないほど過大に出ます。半分以下で使うのが一般的です。${lowBadge(st.n)}</p>`;
+  }else $('#kelly').innerHTML='<p class="empty">勝ちと負けの両方が記録されると計算できます</p>';
+  // 直近 vs 全体
+  const rc=cl.slice(-20),sa=stats(rc,val),sb=st;
+  const row=(l,f)=>`<tr><td>${l}</td><td class="n">${f(sa)}</td><td class="n">${f(sb)}</td></tr>`;
+  $('#recent-cmp').innerHTML=cl.length?`<table><thead><tr><th></th><th class="n">直近${rc.length}回</th><th class="n">全期間</th></tr></thead><tbody>
+    ${row('勝率',s=>(s.winRate*100).toFixed(1)+'%')}${row('期待値 / 1回',s=>yen(s.exp,true))}${row('ペイオフ比',s=>s.payoff==null?'–':s.payoff.toFixed(2))}${row('PF',s=>s.pf==null?'–':s.pf===Infinity?'∞':s.pf.toFixed(2))}${row('平均保有日数',s=>s.avgHold.toFixed(1)+'日')}</tbody></table>
+    <p class="note">直近が全期間より明確に悪い場合は、相場との相性や手法のズレを疑う目安になります。</p>`:'<p class="empty">データがありません</p>';
+  $('#streak').innerHTML=cl.length?`<dl class="m"><div><dt>最大連勝</dt><dd class="gain">${st.maxW}回</dd></div><div><dt>最大連敗</dt><dd class="loss">${st.maxL}回</dd></div><div><dt>現在</dt><dd>${st.curW?`${st.curW}連勝中`:st.curL?`${st.curL}連敗中`:'–'}</dd></div></dl><p class="note">最大連敗の回数は、資金管理の振れ幅を決める基準になります。</p>`:'<p class="empty">データがありません</p>';
+}
+
+/* ===== データ入出力 ===== */
+function buildExport(){
+  const d=C.sorted.map(t=>({id:t.id,date:t.date,side:t.side,code:t.code,name:t.name,price:t.price,qty:t.qty,fee:t.fee||0,memo:t.memo||''}));
+  return {app:'trade-journal',version:1,exportedAt:new Date().toISOString(),settings:S.settings,trades:d,marks:S.marks,
+    derived:{note:'読み取り専用(取り込み時は無視されます)',
+      closed:C.closed.map(c=>({date:c.date,code:c.code,name:c.name,qty:c.qty,sell:c.sell,avg:+c.avg.toFixed(4),cost:Math.round(c.cost),pnl:Math.round(c.pnl),net:Math.round(c.net),ratioPct:+c.ratio.toFixed(3),holdDays:+c.hold.toFixed(2),entryDate:c.entry})),
+      positions:C.positions.map(p=>({code:p.code,name:p.name,qty:p.qty,avg:+p.avg.toFixed(4),cost:Math.round(p.cost),since:p.since}))}};
+}
+function download(name,text,type){
+  const b=new Blob([text],{type}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=name;document.body.appendChild(a);a.click();
+  setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},600);
+}
+function exportJSON(){const s=JSON.stringify(buildExport(),null,2);S.meta.lastExport=new Date().toISOString();save();return s}
+function normTrade(r,i){
+  const side=String(r.side||r.F||'').toUpperCase().trim()[0],date=normDate(r.date||r.datetime),price=+r.price,qty=+r.qty;
+  if(side!=='E'&&side!=='O')return{error:`${i+1}件目: side は E か O`};
+  if(!date)return{error:`${i+1}件目: 日付が不正`};
+  if(!(price>0)||!(qty>0))return{error:`${i+1}件目: 単価・株数が不正`};
+  const code=String(r.code||'').trim(),name=String(r.name||'').trim();
+  if(!code&&!name)return{error:`${i+1}件目: 銘柄が空`};
+  return{id:String(r.id||uid()),date,side,code,name,price,qty,fee:+r.fee||0,memo:String(r.memo||'')};
+}
+function parseCSV(text){
+  const rows=[];let row=[],cur='',q=false;text=text.replace(/^\uFEFF/,'');
+  for(let i=0;i<text.length;i++){const c=text[i];
+    if(q){if(c==='"'){if(text[i+1]==='"'){cur+='"';i++}else q=false}else cur+=c}
+    else if(c==='"')q=true;else if(c===','){row.push(cur);cur=''}
+    else if(c==='\n'){row.push(cur);rows.push(row);row=[];cur=''}else if(c!=='\r')cur+=c}
+  if(cur!==''||row.length){row.push(cur);rows.push(row)}
+  return rows;
+}
+function legacyToTrades(text){
+  const rows=parseCSV(text),head=rows[0].map(s=>s.trim()),ix=n=>head.indexOf(n);
+  const c={d:ix('datetime'),f:ix('F'),code:ix('Code'),name:ix('name'),ep:ix('entry_1 stock_mean'),eq:ix('stock_value'),op:ix('output_1stock_mean'),ov:ix('output_value(yen)')};
+  if(Object.values(c).some(v=>v<0))throw new Error('従来形式のCSVとして必要な列が見つかりません');
+  const num=s=>{const v=parseFloat(String(s??'').trim());return isFinite(v)?v:NaN};
+  const pos={},trades=[],rep={fixed:[],skipped:[],sumRec:0,nE:0,nO:0};
+  rows.slice(1).forEach((r,ri)=>{
+    const F=(r[c.f]||'').trim().toUpperCase();if(F!=='E'&&F!=='O')return;
+    const date=normDate(r[c.d]),name=(r[c.name]||'').trim(),code=((r[c.code]||'').trim().split(/\s+/)[0]||''),line=ri+2;
+    if(!date||!name){rep.skipped.push(`${line}行目: 日付または銘柄名が空`);return}
+    const p=pos[name]=pos[name]||{qty:0,cost:0};
+    if(F==='E'){
+      const pr=num(r[c.ep]),q=num(r[c.eq]);
+      if(!(pr>0&&q>0)){rep.skipped.push(`${line}行目 ${date} ${name}: 買いの単価か株数が空`);return}
+      trades.push({id:'L'+line,date,side:'E',code,name,price:pr,qty:q,fee:0,memo:''});p.qty+=q;p.cost+=pr*q;rep.nE++;
+    }else{
+      if(!(p.qty>0)){rep.skipped.push(`${line}行目 ${date} ${name}: 売却時点で保有がありません`);return}
+      const avg=p.cost/p.qty,q=p.qty,rec=num(r[c.ov]);let sp=num(r[c.op]),memo='';
+      const calc=sp>0?(sp-avg)*q:NaN;
+      if(!(sp>0)){
+        if(isFinite(rec)){sp=avg+rec/q;memo='旧データ補正: 売却単価が空のため記録損益から逆算';rep.fixed.push(`${date} ${name}: 売却単価が空 → 記録損益 ${yen(rec)} から逆算`)}
+        else{sp=avg;memo='旧データ: 売却額が不明のため損益0で決済として処理(要確認)';rep.fixed.push(`${date} ${name}: 売却単価も損益も空 → 損益0で決済扱い (実際の売却額をご確認ください)`)}
+      }else if(isFinite(rec)&&Math.abs(calc-rec)>Math.max(100,Math.abs(rec)*.01)){
+        memo=`旧データ補正: 記録損益に合わせ売却単価を逆算 (元の単価 ${r[c.op]})`;
+        rep.fixed.push(`${date} ${name}: 単価から算出 ${yen(calc)} と記録損益 ${yen(rec)} が不一致 → 記録損益を採用`);sp=avg+rec/q;
+      }
+      if(isFinite(rec))rep.sumRec+=rec;
+      trades.push({id:'L'+line,date,side:'O',code,name,price:+sp.toFixed(4),qty:q,fee:0,memo});p.qty=0;p.cost=0;rep.nO++;
+    }
+  });
+  return {trades,rep};
+}
+function reportHTML(title,lines){
+  const sec=(h,a)=>a&&a.length?`<h4>${h}</h4><ul>${a.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`:'';
+  return `<div class="report"><strong>${esc(title)}</strong>${lines.map(l=>typeof l==='string'?`<p style="margin:4px 0">${esc(l)}</p>`:sec(l.h,l.a)).join('')}</div>`;
+}
+function applyImport(text,mode,fname){
+  const t=text.trim(),el=$('#imp-report');
+  try{
+    let incoming=[],extra=[],legacy=false,rep=null,settingsIn=null,marksIn=null;
+    if(t[0]==='{'||t[0]==='['){
+      const d=JSON.parse(t),arr=Array.isArray(d)?d:d.trades;
+      if(!Array.isArray(arr))throw new Error('trades 配列が見つかりません');
+      const bad=[];arr.forEach((r,i)=>{const n=normTrade(r,i);if(n.error)bad.push(n.error);else incoming.push(n)});
+      if(bad.length)extra.push({h:`読み込めなかった行 (${bad.length}件)`,a:bad.slice(0,20)});
+      if(!Array.isArray(d)){settingsIn=d.settings;marksIn=d.marks}
+    }else if(/datetime/.test(t.split('\n')[0])){
+      legacy=true;const r=legacyToTrades(t);incoming=r.trades;rep=r.rep;
+    }else throw new Error('JSONでも従来のCSVでもない形式です');
+    if(!incoming.length)throw new Error('取り込める取引がありませんでした');
+    if(mode==='replace'){
+      if(!confirm(`現在の${S.trades.length}件を削除し、${incoming.length}件に置き換えます。よろしいですか？`))return;
+      S.trades=[];S.meta.seq=0;if(settingsIn)S.settings={...S.settings,...settingsIn};S.marks=marksIn&&typeof marksIn==='object'?marksIn:{};
+    }else if(marksIn&&typeof marksIn==='object')S.marks={...marksIn,...S.marks};
+    const have=new Set(S.trades.map(x=>x.id));let added=0,dup=0;
+    incoming.forEach(n=>{if(have.has(n.id)){dup++;return}n.seq=++S.meta.seq;S.trades.push(n);have.add(n.id);added++});
+    save();refreshAll();
+    const res=compute(S.trades,settingsNum()),lines=[`${added}件を取り込みました${dup?` (同じIDの${dup}件は重複のため除外)`:''}。現在の記録は全${S.trades.length}件です。`];
+    if(legacy){
+      const mine=sum(res.closed.map(c=>c.pnl));
+      lines.push(`従来の買い ${rep.nE}件・売り ${rep.nO}件を約定ログに変換しました。売り行は「その銘柄の保有を全株決済」として扱っています。`);
+      lines.push(`Excel記録の損益合計 ${yen(rep.sumRec)} / 取り込み後の算出 ${yen(mine)}`);
+      lines.push({h:`補正した行 (${rep.fixed.length}件)`,a:rep.fixed});lines.push({h:`取り込めなかった行 (${rep.skipped.length}件)`,a:rep.skipped});
+    }
+    extra.forEach(e=>lines.push(e));
+    if(res.warns.length)lines.push({h:`整合性の警告 (${res.warns.length}件)`,a:res.warns.map(w=>w.msg)});
+    el.innerHTML=reportHTML(fname?`取り込み結果: ${fname}`:'取り込み結果',lines);
+    toast(`${added}件を取り込みました`);
+  }catch(e){el.innerHTML=`<p class="msg err">${esc(e.message||e)}</p>`}
+}
+
+/* ===== 描画制御 ===== */
+function renderStatus(){
+  const n=S.trades.length;let ex='未出力',warn=n>0;
+  if(S.meta.lastExport){const d=Math.floor((Date.now()-new Date(S.meta.lastExport))/864e5);ex=d<=0?'本日出力':d+'日前に出力';warn=n>0&&d>14}
+  $('#stat').className='stat'+(warn?' warn':'');
+  $('#stat').innerHTML=(storageOK?`保存済み・${n}件`:'<b style="color:var(--loss)">ブラウザ保存が無効です</b>')+`<br>JSON: <b>${ex}</b>`;
+  $('#exp-note').textContent=`最終出力: ${S.meta.lastExport?S.meta.lastExport.slice(0,10):'まだありません'}`;
+}
+function renderData(){
+  const s=S.settings;$('#s-win').value=+(s.netWin*100).toFixed(2);$('#s-loss').value=+(s.netLoss*100).toFixed(2);$('#s-fee').value=s.fee;$('#s-min').value=s.minN;$('#s-jp').checked=!!s.jp;
+}
+const RENDER={dash:renderDash,entry(){renderRecent();updatePreview()},log:renderLog,pos:renderPos,ana:renderAna,data:renderData};
+function refreshAll(){C=compute(S.trades,settingsNum());document.documentElement.classList.toggle('jp',!!S.settings.jp);refreshLists();renderStatus();RENDER[UI.view]()}
+function go(v){
+  UI.view=v;$$('.view').forEach(e=>e.hidden=e.id!=='v-'+v);
+  $$('#nav button').forEach(b=>b.setAttribute('aria-current',b.dataset.v===v?'page':'false'));
+  syncToggles();RENDER[v]();if(v!=='entry')window.scrollTo({top:0});
+}
+function syncToggles(){
+  $$('[data-metric] button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.m===UI.metric));
+  $$('#range button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.r===UI.range));
+  $$('#wdmode button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.w===UI.wd));
+}
+
+/* ===== イベント ===== */
+$('#nav').addEventListener('click',e=>{const b=e.target.closest('button');if(b)go(b.dataset.v)});
+$$('[data-metric]').forEach(g=>g.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;UI.metric=b.dataset.m;syncToggles();RENDER[UI.view]()}));
+$('#range').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;UI.range=b.dataset.r;syncToggles();renderDash()});
+$('#wdmode').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;UI.wd=b.dataset.w;syncToggles();renderDash()});
+$('#side').addEventListener('click',e=>{const b=e.target.closest('button');if(b)setSide(b.dataset.s)});
+['#f-date','#f-price','#f-qty','#f-fee'].forEach(s=>$(s).addEventListener('input',updatePreview));
+$('#f-code').addEventListener('input',()=>{const {byCode}=knownMaps(),c=$('#f-code').value.trim();if(byCode[c])$('#f-name').value=byCode[c];updatePreview()});
+$('#f-name').addEventListener('input',()=>{const {byName}=knownMaps(),n=$('#f-name').value.trim();if(byName[n])$('#f-code').value=byName[n];updatePreview()});
+$('#f-all').addEventListener('click',()=>{const f=readForm(),p=C.posMap.get(keyFor(f.code,f.name));if(p&&p.qty>0){$('#f-qty').value=p.qty;updatePreview()}});
+$('#f-save').addEventListener('click',saveTrade);
+$('#f-cancel').addEventListener('click',()=>{resetForm();msg('')});
+$('#v-entry').addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.tagName==='INPUT'){e.preventDefault();saveTrade()}});
+['#lg-side','#lg-code'].forEach(s=>$(s).addEventListener('change',()=>{UI.logLimit=100;renderLog()}));
+$('#lg-q').addEventListener('input',()=>{UI.logLimit=100;renderLog()});
+document.addEventListener('click',e=>{
+  const ed=e.target.closest('[data-edit]'),dl=e.target.closest('[data-del]');
+  if(ed)editTrade(ed.dataset.edit);else if(dl)deleteTrade(dl.dataset.del);
+  else if(e.target.id==='more'){UI.logLimit+=200;renderLog()}
+});
+$('#pos').addEventListener('input',e=>{const k=e.target.dataset.mark;if(k==null)return;const v=parseFloat(e.target.value);if(v>0)S.marks[k]=v;else delete S.marks[k];save();calcMark(k)});
+$('#mc-h').addEventListener('change',()=>{S.settings.mcN=Math.max(1,Math.min(200,Math.round(+$('#mc-h').value||20)));save();renderAna()});
+$('#mc-run').addEventListener('click',()=>{UI.seed=(Math.random()*1e9)|0;renderAna()});
+$('#exp-dl').addEventListener('click',()=>{const s=exportJSON();download('trade-journal-'+todayStr().replace(/-/g,'')+'.json',s,'application/json');toast('JSONを保存しました')});
+$('#exp-copy').addEventListener('click',async()=>{const s=exportJSON();try{await navigator.clipboard.writeText(s);toast('コピーしました')}catch(e){const t=$('#exp-text');t.hidden=false;t.value=s;t.select();toast('自動コピーできないため、表示した内容を手動でコピーしてください')}});
+$('#exp-show').addEventListener('click',()=>{const t=$('#exp-text');t.hidden=!t.hidden;if(!t.hidden)t.value=JSON.stringify(buildExport(),null,2)});
+$('#imp-file').addEventListener('change',e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{applyImport(String(r.result),document.querySelector('input[name=imode]:checked').value,f.name);e.target.value=''};r.readAsText(f,'utf-8')});
+$('#imp-paste').addEventListener('click',()=>{const v=$('#imp-text').value;if(!v.trim())return toast('貼り付け欄が空です');applyImport(v,document.querySelector('input[name=imode]:checked').value,'');});
+const setNum=(id,fn)=>$(id).addEventListener('change',()=>{fn(parseFloat($(id).value));save();refreshAll()});
+setNum('#s-win',v=>S.settings.netWin=isFinite(v)?v/100:0.8);
+setNum('#s-loss',v=>S.settings.netLoss=isFinite(v)?v/100:1);
+setNum('#s-fee',v=>S.settings.fee=isFinite(v)?v:0);
+setNum('#s-min',v=>S.settings.minN=isFinite(v)&&v>0?Math.round(v):30);
+$('#s-jp').addEventListener('change',()=>{S.settings.jp=$('#s-jp').checked;save();refreshAll()});
+$('#wipe').addEventListener('click',()=>{
+  if(!confirm('すべての取引・設定を削除します。JSONは書き出し済みですか？'))return;
+  if(!confirm('本当に削除してよろしいですか？ 元には戻せません。'))return;
+  S=DEFAULTS();save();refreshAll();$('#imp-report').innerHTML='';toast('削除しました');
+});
+let rt;window.addEventListener('resize',()=>{clearTimeout(rt);rt=setTimeout(()=>{if(['dash','ana'].includes(UI.view))RENDER[UI.view]()},150)});
+
+/* ===== GitHub 同期 ===== */
+const GHKEY='tradeJournal.gh';
+const ghCfg=()=>{try{return JSON.parse(localStorage.getItem(GHKEY))||{}}catch(e){return{}}};
+const ghSave=c=>{try{localStorage.setItem(GHKEY,JSON.stringify(c))}catch(e){}};
+const ghForm=()=>({repo:$('#gh-repo').value.trim(),path:$('#gh-path').value.trim()||'trade-journal.json',token:$('#gh-token').value.trim()});
+function ghNote(t){$('#gh-note').textContent=t||''}
+function applyReplace(text){
+  const d=JSON.parse(text),arr=Array.isArray(d)?d:d.trades;
+  if(!Array.isArray(arr))throw new Error('trades 配列が見つかりません');
+  const incoming=[],bad=[];
+  arr.forEach((r,i)=>{const n=normTrade(r,i);if(n.error)bad.push(n.error);else incoming.push(n)});
+  if(!incoming.length)throw new Error('取り込める取引がありませんでした');
+  S.trades=[];S.meta.seq=0;
+  if(!Array.isArray(d)){
+    if(d.settings&&typeof d.settings==='object')S.settings={...S.settings,...d.settings};
+    S.marks=d.marks&&typeof d.marks==='object'?d.marks:{};
+  }
+  incoming.forEach(n=>{n.seq=++S.meta.seq;S.trades.push(n)});
+  save();refreshAll();
+  return {n:incoming.length,bad};
+}
+async function ghPull(auto){
+  const c=ghCfg();
+  if(!c.repo||!c.token){if(!auto)toast('リポジトリと PAT を入力してください');return}
+  ghNote('読み込み中…');
+  try{
+    const url=`https://api.github.com/repos/${c.repo}/contents/${encodeURI(c.path||'trade-journal.json')}`;
+    const r=await fetch(url,{headers:{Authorization:`Bearer ${c.token}`,Accept:'application/vnd.github.raw+json','X-GitHub-Api-Version':'2022-11-28'},cache:'no-store'});
+    if(!r.ok){
+      const m={401:'PAT が無効か期限切れです',403:'権限不足です (PAT の対象リポジトリと Contents 権限を確認)',404:'リポジトリかパスが見つかりません (private の場合は PAT の対象外でも 404 になります)'};
+      throw new Error(m[r.status]||`HTTP ${r.status}`);
+    }
+    const res=applyReplace(await r.text());
+    c.lastPull=new Date().toISOString();ghSave(c);
+    ghNote(`最終取得 ${c.lastPull.slice(0,16).replace('T',' ')}・${res.n}件`);
+    if(res.bad.length)$('#imp-report').innerHTML=reportHTML('GitHub 読み込み',[{h:`読み込めなかった行 (${res.bad.length}件)`,a:res.bad.slice(0,20)}]);
+    toast(`GitHub から ${res.n}件を読み込みました`);
+  }catch(e){
+    ghNote(c.lastPull?`最終取得 ${c.lastPull.slice(0,16).replace('T',' ')} (今回失敗)`:'');
+    toast('GitHub 読み込み失敗: '+(e.message||e));
+  }
+}
+$('#gh-pull').addEventListener('click',()=>{ghSave({...ghCfg(),...ghForm()});ghPull(false)});
+$('#gh-forget').addEventListener('click',()=>{const c=ghCfg();delete c.token;ghSave(c);$('#gh-token').value='';toast('PAT を削除しました')});
+{const c=ghCfg();$('#gh-repo').value=c.repo||'';$('#gh-path').value=c.path||'trade-journal.json';$('#gh-token').value=c.token||'';if(c.lastPull)ghNote(`最終取得 ${c.lastPull.slice(0,16).replace('T',' ')}`)}
+
+/* ===== 起動 ===== */
+$('#mc-h').value=S.settings.mcN||20;
+$('#f-date').value=todayStr();$('#f-fee').value=S.settings.fee||'';
+refreshAll();
+go(S.trades.length?'dash':'entry');
+ghPull(true);
+</script>
+</body>
+</html>
