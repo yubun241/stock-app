@@ -211,6 +211,7 @@ dialog#jsondlg::backdrop{background:rgba(0,0,0,.45)}
       <div id="dash-warn"></div>
       <div class="sheet"><h2>成績サマリー<span id="sum-note"></span></h2><div class="body" id="summary"></div></div>
       <div class="sheet"><h2>累計損益の推移<span>決済日ごとの積み上げ</span></h2><div class="body"><div class="chart" id="ch-curve"></div></div></div>
+      <div class="sheet"><h2>投資額の推移<span><span class="seg" id="invmode" style="margin-left:6px"><button data-i="exp">投資中の額</button><button data-i="cum">累計投資額</button></span></span></h2><div class="body"><div class="chart" id="ch-invest"></div><p class="note" id="invest-note"></p></div></div>
       <div class="sheet"><h2>取引ごとの収益率<span>横軸=決済日・縦軸=損益÷投資額・点の大きさ=投資額。黒線=単純平均、青線=加重平均(損益合計÷投資額合計)</span></h2><div class="body"><div class="chart" id="ch-ratio"></div><p class="note" id="ratio-note"></p></div></div>
       <div class="cols">
         <div class="sheet"><h2>月次損益<span>灰色は次月の予測(中央値と10–90%範囲)</span></h2><div class="body"><div class="chart" id="ch-month"></div></div></div>
@@ -379,7 +380,7 @@ function load(){
   return d;
 }
 let S=load();
-const UI={view:'dash',metric:'pnl',range:'all',wd:'entry',editId:null,side:'E',logLimit:100,seed:42,h:null};
+const UI={view:'dash',metric:'pnl',range:'all',wd:'entry',inv:'cum',editId:null,side:'E',logLimit:100,seed:42,h:null};
 function save(sync=true){
   try{localStorage.setItem(KEY,JSON.stringify({version:1,settings:S.settings,trades:S.trades,marks:S.marks,meta:S.meta}));storageOK=true}
   catch(e){storageOK=false}
@@ -585,6 +586,25 @@ function renderDash(){
   if(pts.length)pts.unshift([pts[0][0]-1,0,null]);
   lineChart($('#ch-curve'),{series:[{pts,step:true,area:true,cls:'c-acc',dots:true,tip:p=>p[2]?`${p[2].date} ${p[2].name} ${yen(val(p[2]),true)} → 累計 ${yen(p[1],true)}`:''}],
     xt:timeTicks,endLabel:p=>yen(p[1],true),h:250,label:'累計損益の推移'});
+  // 投資額の推移
+  {
+    const costBy=new Map();let exp=0,cum=0;const ev=[];
+    C.sorted.forEach(t=>{const k=keyOf(t),i=C.info[t.id];if(!i||i.afterCost==null)return;
+      const prev=costBy.get(k)||0;costBy.set(k,i.afterCost);exp+=i.afterCost-prev;
+      if(t.side==='E')cum+=t.price*t.qty+(t.fee||0);
+      ev.push({d:dayNum(t.date),exp,cum})});
+    const td=dayNum(todayStr());
+    let from=0;if(UI.range==='ytd')from=dayNum(todayStr().slice(0,4)+'-01-01');else if(UI.range==='90')from=td-90;else if(UI.range==='30')from=td-30;
+    const pe=[],pc=[];let le={exp:0,cum:0};
+    ev.forEach(e=>{if(e.d<from){le=e;return}pe.push([e.d,e.exp]);pc.push([e.d,e.cum])});
+    if(ev.length){const x0=Math.max(from,ev[0].d);if(!pe.length||pe[0][0]>x0){pe.unshift([x0,le.exp]);pc.unshift([x0,le.cum])}
+      pe.push([td,pe[pe.length-1][1]]);pc.push([td,pc[pc.length-1][1]])}
+    if(ev.length){
+      lineChart($('#ch-invest'),{series:[{pts:UI.inv==='cum'?pc:pe,step:true,area:true,cls:'c-acc'}],xt:timeTicks,endLabel:p=>yen(p[1]),h:230,label:'投資額の推移'});
+      const mx=Math.max(...pe.map(p=>p[1])),avg=(()=>{let a=0,n=0;for(let i=1;i<pe.length;i++){const w=pe[i][0]-pe[i-1][0];a+=pe[i-1][1]*w;n+=w}return n?a/n:0})();
+      $('#invest-note').textContent=UI.inv==='cum'?`累計投資額 ${yen(cum)} (買い付け金額の積み上げ)。同じ資金を回転させた分も積み上がるので、実際に必要だった資金は「投資中の額」の最大 ${yen(mx)} です。`:`投資中: ${yen(exp)} (${C.positions.length}銘柄)・期間内の最大 ${yen(mx)}・日平均 ${yen(avg)}。保有している株の取得額合計で、売却すると減り、買うと増えます。`;
+    }else{empty($('#ch-invest'),'記録がありません');$('#invest-note').textContent=''}
+  }
   // 収益率の散布図
   const rp=cl.map(c=>({x:dayNum(c.date),y:c.cost>0?val(c)/c.cost*100:0,c:c.cost,t:`${c.date} ${c.name} 投資 ${yen(c.cost)} → ${yen(val(c),true)} (${pct(c.cost>0?val(c)/c.cost*100:0,2,true)})`}));
   const rAvg=mean(rp.map(p=>p.y)),rTotC=sum(cl.map(c=>c.cost)),rW=rTotC>0?sum(cl.map(val))/rTotC*100:NaN;
@@ -920,12 +940,14 @@ function syncToggles(){
   $$('[data-metric] button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.m===UI.metric));
   $$('#range button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.r===UI.range));
   $$('#wdmode button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.w===UI.wd));
+  $$('#invmode button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.i===UI.inv));
 }
 
 /* ===== イベント ===== */
 $('#nav').addEventListener('click',e=>{const b=e.target.closest('button');if(b)go(b.dataset.v)});
 $$('[data-metric]').forEach(g=>g.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;UI.metric=b.dataset.m;syncToggles();RENDER[UI.view]()}));
 $('#range').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;UI.range=b.dataset.r;syncToggles();renderDash()});
+$('#invmode').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;UI.inv=b.dataset.i;syncToggles();renderDash()});
 $('#wdmode').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;UI.wd=b.dataset.w;syncToggles();renderDash()});
 $('#side').addEventListener('click',e=>{const b=e.target.closest('button');if(b)setSide(b.dataset.s)});
 ['#f-date','#f-price','#f-qty','#f-fee'].forEach(s=>$(s).addEventListener('input',updatePreview));
